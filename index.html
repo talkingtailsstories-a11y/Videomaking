@@ -1025,6 +1025,41 @@ Write the full story here. The studio will automatically divide it into scenes."
                 </div>
             </div>
 
+        <div
+            id="videoOutput"
+            style="
+                display:none;
+                margin-top:14px;
+                padding:14px;
+                border:1px solid var(--border);
+                border-radius:12px;
+                background:#f9fafb;
+            "
+        >
+            <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">
+                🎬 Generated Kling Video
+            </div>
+
+            <video
+                id="videoPlayer"
+                controls
+                playsinline
+                style="width:100%;max-height:520px;border-radius:10px;background:#111;"
+            ></video>
+
+            <div class="action-row" style="margin-top:10px;">
+                <a
+                    class="btn btn-green"
+                    id="downloadVideoBtn"
+                    href="#"
+                    download="talking-tails-kling-video.mp4"
+                    style="text-decoration:none;pointer-events:none;opacity:.5;"
+                >
+                    ⬇️ Download Video
+                </a>
+            </div>
+        </div>
+
         </section>
 
 
@@ -1268,7 +1303,17 @@ let project = {
 const VOICE_API_URL =
     "https://dugkzhwwlvuckvhgcxza.supabase.co/functions/v1/dynamic-function";
 
+/* Kling video generation stays behind Supabase.
+   Never put KLING_API_KEY in this file. */
+const KLING_API_URL =
+    "https://dugkzhwwlvuckvhgcxza.supabase.co/functions/v1/kling-video";
+
+const DEFAULT_KLING_IMAGE =
+    "https://dugkzhwwlvuckvhgcxza.supabase.co/storage/v1/object/public/talking-tails/Burno.jpg";
+
 let generatedVoiceUrl = null;
+let generatedVideoUrl = null;
+let klingPollTimer = null;
 
 async function generateVoice(){
 
@@ -2117,32 +2162,268 @@ function createVideoPlan(){
         .trim();
 
     if(!script){
-
-        showToast(
-            "Please add a script first."
-        );
-
+        showToast("Please add a script first.");
         return;
-
     }
 
-
     project.script = script;
-
-    project.createdAt =
-        new Date().toISOString();
-
+    project.createdAt = new Date().toISOString();
 
     const production =
-        document
-        .getElementById("productionSection");
+        document.getElementById("productionSection");
 
     production.classList.add("show");
-
     scrollToSection("productionSection");
 
-    runProduction();
+    // Build the local storyboard first, then send the first scene to Kling.
+    project.scenes = parseScript(project.script);
 
+    project.scenes.forEach(scene => {
+        scene.matchedCharacters =
+            matchCharacters(scene).map(c => c.name);
+    });
+
+    renderScenes();
+
+    document.getElementById("sceneCount").textContent =
+        project.scenes.length + " scenes";
+
+    generateKlingVideo();
+
+}
+
+
+/* =========================
+   KLING VIDEO GENERATION
+========================= */
+
+function setVideoOutput(url){
+
+    const output = document.getElementById("videoOutput");
+    const player = document.getElementById("videoPlayer");
+    const download = document.getElementById("downloadVideoBtn");
+
+    if(generatedVideoUrl && generatedVideoUrl !== url){
+        try{ URL.revokeObjectURL(generatedVideoUrl); }catch(e){}
+    }
+
+    generatedVideoUrl = url;
+    player.src = url;
+    player.load();
+
+    download.href = url;
+    download.style.pointerEvents = "auto";
+    download.style.opacity = "1";
+
+    output.style.display = "block";
+}
+
+function getKlingImageUrl(){
+
+    // The current browser character uploader stores data URLs locally.
+    // Kling needs a publicly reachable image URL, so use the verified
+    // Bruno image in Supabase unless a public URL is supplied later.
+    return DEFAULT_KLING_IMAGE;
+}
+
+function buildKlingPrompt(scene){
+
+    const characterText =
+        scene && scene.matchedCharacters && scene.matchedCharacters.length
+        ? scene.matchedCharacters.join(", ")
+        : "Talking Tails animal characters";
+
+    return [
+        "Premium 3D children's cartoon animation for Talking Tails Stories.",
+        "Keep the character appearance consistent with the reference image.",
+        "Characters: " + characterText + ".",
+        "Scene: " + (scene ? scene.text : project.script).slice(0, 900),
+        "Visual direction: " + (scene ? scene.visual : "warm colorful family-friendly environment") + ".",
+        "Camera: " + (scene ? scene.camera : "cinematic medium shot with gentle movement") + ".",
+        "Emotion: " + (scene ? scene.emotion : "happy and expressive") + ".",
+        "No text, no subtitles, no watermark, child-safe, polished 3D animation."
+    ].join(" ");
+}
+
+function extractKlingTaskId(data){
+
+    return data?.kling?.data?.task_id ||
+           data?.kling?.task_id ||
+           data?.data?.task_id ||
+           data?.task_id ||
+           null;
+}
+
+function extractKlingVideoUrl(data){
+
+    return data?.kling?.data?.task_result?.videos?.[0]?.url ||
+           data?.kling?.data?.task_result?.video_url ||
+           data?.kling?.data?.video_url ||
+           data?.kling?.video_url ||
+           data?.data?.task_result?.videos?.[0]?.url ||
+           data?.data?.video_url ||
+           data?.video_url ||
+           null;
+}
+
+function extractKlingStatus(data){
+
+    return String(
+        data?.kling?.data?.task_status ||
+        data?.kling?.task_status ||
+        data?.data?.task_status ||
+        data?.task_status ||
+        ""
+    ).toLowerCase();
+}
+
+async function klingRequest(body){
+
+    const response = await fetch(
+        KLING_API_URL,
+        {
+            method:"POST",
+            headers:{
+                "Content-Type":"application/json"
+            },
+            body:JSON.stringify(body)
+        }
+    );
+
+    let data = null;
+
+    try{
+        data = await response.json();
+    }
+    catch(error){
+        const text = await response.text();
+        throw new Error(text || "Kling server returned an invalid response.");
+    }
+
+    if(!response.ok || data?.success === false){
+        throw new Error(
+            data?.details ||
+            data?.error ||
+            data?.message ||
+            "Kling video request failed."
+        );
+    }
+
+    return data;
+}
+
+async function generateKlingVideo(){
+
+    const button =
+        document.querySelector('button[onclick="createVideoPlan()"]');
+
+    const scene =
+        project.scenes.length
+        ? project.scenes[0]
+        : null;
+
+    if(klingPollTimer){
+        clearTimeout(klingPollTimer);
+        klingPollTimer = null;
+    }
+
+    if(button){
+        button.disabled = true;
+        button.textContent = "⏳ Creating Kling Video...";
+    }
+
+    try{
+
+        updateProgress(10,"Sending scene to Kling...");
+        addLog("Sending first scene to Kling AI...","info");
+
+        const data = await klingRequest({
+            image: getKlingImageUrl(),
+            prompt: buildKlingPrompt(scene)
+        });
+
+        const directUrl = extractKlingVideoUrl(data);
+
+        if(directUrl){
+            setVideoOutput(directUrl);
+            updateProgress(100,"Kling video ready.");
+            addLog("Kling video generated successfully.","success");
+            showToast("Video generated successfully.");
+            return;
+        }
+
+        const taskId = extractKlingTaskId(data);
+
+        if(!taskId){
+            throw new Error("Kling returned no task_id or video URL.");
+        }
+
+        updateProgress(25,"Kling task submitted. Waiting for video...");
+        addLog("Kling task submitted: " + taskId,"info");
+
+        await pollKlingVideo(taskId);
+
+    }
+    catch(error){
+
+        console.error("Kling video error:",error);
+        updateProgress(0,"Kling video generation failed.");
+        addLog("Kling error: " + (error.message || "Unknown error"),"warning");
+        showToast("Kling error: " + (error.message || "Unknown error"));
+
+    }
+    finally{
+
+        if(button){
+            button.disabled = false;
+            button.textContent = "🎬 CREATE VIDEO";
+        }
+
+    }
+}
+
+async function pollKlingVideo(taskId){
+
+    // The Edge Function must accept { action:"status", task_id } and
+    // return the Kling status/result while keeping KLING_API_KEY server-side.
+    const maxAttempts = 60;
+    let attempt = 0;
+
+    async function check(){
+
+        attempt++;
+
+        const data = await klingRequest({
+            action:"status",
+            task_id:taskId
+        });
+
+        const url = extractKlingVideoUrl(data);
+        const status = extractKlingStatus(data);
+
+        if(url){
+            setVideoOutput(url);
+            updateProgress(100,"Kling video ready.");
+            addLog("Kling video is ready for preview and download.","success");
+            showToast("Video generated successfully.");
+            return;
+        }
+
+        if(status === "failed" || status === "error"){
+            throw new Error("Kling task failed.");
+        }
+
+        const percent = Math.min(95, 25 + Math.round((attempt / maxAttempts) * 70));
+        updateProgress(percent,"Kling is generating the video... (" + status + ")");
+
+        if(attempt >= maxAttempts){
+            throw new Error("Kling is still processing. Please try again shortly.");
+        }
+
+        klingPollTimer = setTimeout(check,5000);
+    }
+
+    await check();
 }
 
 
@@ -2927,9 +3208,15 @@ updateWordCount();
 window.addEventListener("beforeunload", function(){
 
     if(generatedVoiceUrl){
-
         URL.revokeObjectURL(generatedVoiceUrl);
+    }
 
+    if(generatedVideoUrl && generatedVideoUrl.startsWith("blob:")){
+        URL.revokeObjectURL(generatedVideoUrl);
+    }
+
+    if(klingPollTimer){
+        clearTimeout(klingPollTimer);
     }
 
 });
