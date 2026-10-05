@@ -1,0 +1,2735 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Talking Tails Stories - AI Video Studio</title>
+
+<style>
+*{
+    box-sizing:border-box;
+    margin:0;
+    padding:0;
+}
+
+:root{
+    --pink:#e2136e;
+    --pink-dark:#b90f59;
+    --purple:#7c3aed;
+    --blue:#2563eb;
+    --green:#16a34a;
+    --orange:#f97316;
+    --bg:#f6f7fb;
+    --card:#ffffff;
+    --text:#172033;
+    --muted:#6b7280;
+    --border:#e5e7eb;
+    --shadow:0 10px 30px rgba(0,0,0,.07);
+}
+
+body{
+    font-family:Arial,Helvetica,sans-serif;
+    background:var(--bg);
+    color:var(--text);
+}
+
+button,
+input,
+textarea{
+    font-family:inherit;
+}
+
+button{
+    cursor:pointer;
+}
+
+.app{
+    min-height:100vh;
+}
+
+/* HEADER */
+
+.header{
+    height:72px;
+    background:#fff;
+    border-bottom:1px solid var(--border);
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:0 25px;
+    position:sticky;
+    top:0;
+    z-index:100;
+}
+
+.logo-area{
+    display:flex;
+    align-items:center;
+    gap:12px;
+}
+
+.logo{
+    width:46px;
+    height:46px;
+    border-radius:14px;
+    background:linear-gradient(135deg,#e2136e,#7c3aed);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:25px;
+}
+
+.logo-text h1{
+    font-size:18px;
+}
+
+.logo-text p{
+    font-size:11px;
+    color:var(--muted);
+    margin-top:3px;
+}
+
+.header-right{
+    display:flex;
+    align-items:center;
+    gap:10px;
+}
+
+.badge{
+    background:#fdf2f8;
+    color:var(--pink);
+    padding:7px 12px;
+    border-radius:20px;
+    font-size:12px;
+    font-weight:bold;
+}
+
+/* LAYOUT */
+
+.layout{
+    display:grid;
+    grid-template-columns:250px 1fr;
+    min-height:calc(100vh - 72px);
+}
+
+.sidebar{
+    background:#fff;
+    border-right:1px solid var(--border);
+    padding:20px 14px;
+}
+
+.nav-title{
+    color:#9ca3af;
+    font-size:11px;
+    font-weight:bold;
+    text-transform:uppercase;
+    padding:10px 12px;
+}
+
+.nav-btn{
+    width:100%;
+    border:0;
+    background:transparent;
+    padding:12px;
+    border-radius:10px;
+    display:flex;
+    align-items:center;
+    gap:10px;
+    color:#4b5563;
+    margin-bottom:4px;
+    text-align:left;
+    font-size:14px;
+}
+
+.nav-btn:hover,
+.nav-btn.active{
+    background:#fdf2f8;
+    color:var(--pink);
+}
+
+.main{
+    padding:25px;
+    max-width:1500px;
+    width:100%;
+    margin:auto;
+}
+
+/* HERO */
+
+.hero{
+    background:linear-gradient(135deg,#171a2b,#33215f);
+    color:white;
+    border-radius:20px;
+    padding:30px;
+    margin-bottom:22px;
+    position:relative;
+    overflow:hidden;
+}
+
+.hero:after{
+    content:"";
+    width:250px;
+    height:250px;
+    position:absolute;
+    right:-80px;
+    top:-100px;
+    border-radius:50%;
+    background:rgba(255,255,255,.08);
+}
+
+.hero h2{
+    font-size:28px;
+    margin-bottom:8px;
+}
+
+.hero p{
+    color:#d1d5db;
+    max-width:700px;
+    line-height:1.6;
+}
+
+.tagline{
+    margin-top:15px;
+    color:#f9a8d4;
+    font-weight:bold;
+}
+
+/* GRID */
+
+.grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:20px;
+}
+
+.card{
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:16px;
+    padding:20px;
+    box-shadow:var(--shadow);
+}
+
+.card.full{
+    grid-column:1/-1;
+}
+
+.card-header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-bottom:16px;
+}
+
+.card-header h3{
+    font-size:17px;
+}
+
+.card-header span{
+    font-size:12px;
+    color:var(--muted);
+}
+
+/* SCRIPT */
+
+textarea{
+    width:100%;
+    min-height:330px;
+    resize:vertical;
+    border:1px solid var(--border);
+    border-radius:12px;
+    padding:15px;
+    font-size:14px;
+    line-height:1.6;
+    outline:none;
+}
+
+textarea:focus,
+input:focus{
+    border-color:var(--pink);
+    box-shadow:0 0 0 3px rgba(226,19,110,.08);
+}
+
+.file-row{
+    display:flex;
+    gap:10px;
+    margin-top:12px;
+}
+
+.file-input{
+    display:none;
+}
+
+.file-label{
+    background:#f3f4f6;
+    padding:11px 15px;
+    border-radius:9px;
+    font-size:13px;
+    cursor:pointer;
+}
+
+.file-label:hover{
+    background:#e5e7eb;
+}
+
+/* CHARACTERS */
+
+.character-upload{
+    border:2px dashed #d1d5db;
+    border-radius:13px;
+    padding:20px;
+    text-align:center;
+    margin-bottom:18px;
+}
+
+.character-upload:hover{
+    border-color:var(--pink);
+}
+
+.character-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(150px,1fr));
+    gap:14px;
+}
+
+.character-card{
+    border:1px solid var(--border);
+    border-radius:13px;
+    overflow:hidden;
+    background:#fff;
+}
+
+.character-image{
+    width:100%;
+    height:130px;
+    object-fit:cover;
+    background:#f3f4f6;
+}
+
+.character-info{
+    padding:10px;
+}
+
+.character-name{
+    width:100%;
+    border:1px solid var(--border);
+    padding:8px;
+    border-radius:7px;
+    font-size:12px;
+    margin-bottom:7px;
+}
+
+.character-role{
+    font-size:11px;
+    color:var(--muted);
+}
+
+/* BUTTONS */
+
+.btn{
+    border:0;
+    border-radius:10px;
+    padding:11px 16px;
+    font-weight:bold;
+    font-size:13px;
+    transition:.2s;
+}
+
+.btn:hover{
+    transform:translateY(-1px);
+}
+
+.btn-primary{
+    background:var(--pink);
+    color:white;
+}
+
+.btn-primary:hover{
+    background:var(--pink-dark);
+}
+
+.btn-secondary{
+    background:#f3f4f6;
+    color:#374151;
+}
+
+.btn-blue{
+    background:var(--blue);
+    color:white;
+}
+
+.btn-green{
+    background:var(--green);
+    color:white;
+}
+
+.btn-danger{
+    background:#fee2e2;
+    color:#b91c1c;
+}
+
+.action-row{
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+    margin-top:15px;
+}
+
+/* SETTINGS */
+
+.setting-grid{
+    display:grid;
+    grid-template-columns:repeat(4,1fr);
+    gap:12px;
+}
+
+.setting{
+    background:#f9fafb;
+    border:1px solid var(--border);
+    border-radius:11px;
+    padding:14px;
+}
+
+.setting label{
+    display:block;
+    color:var(--muted);
+    font-size:11px;
+    margin-bottom:6px;
+}
+
+.setting strong{
+    font-size:14px;
+}
+
+/* PRODUCTION */
+
+.production{
+    display:none;
+}
+
+.production.show{
+    display:block;
+}
+
+.progress-container{
+    background:#e5e7eb;
+    border-radius:20px;
+    height:12px;
+    overflow:hidden;
+}
+
+.progress-bar{
+    height:100%;
+    width:0%;
+    background:linear-gradient(90deg,#e2136e,#7c3aed);
+    transition:width .5s;
+}
+
+.progress-text{
+    display:flex;
+    justify-content:space-between;
+    font-size:12px;
+    color:var(--muted);
+    margin-top:8px;
+}
+
+/* SCENES */
+
+.scene-list{
+    display:flex;
+    flex-direction:column;
+    gap:12px;
+}
+
+.scene{
+    border:1px solid var(--border);
+    border-radius:13px;
+    overflow:hidden;
+    background:white;
+}
+
+.scene-top{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:12px 15px;
+    background:#fafafa;
+    border-bottom:1px solid var(--border);
+}
+
+.scene-number{
+    font-weight:bold;
+    color:var(--pink);
+}
+
+.scene-duration{
+    font-size:11px;
+    color:var(--muted);
+}
+
+.scene-body{
+    display:grid;
+    grid-template-columns:170px 1fr;
+    gap:15px;
+    padding:15px;
+}
+
+.scene-visual{
+    height:100px;
+    border-radius:10px;
+    background:linear-gradient(135deg,#dbeafe,#ede9fe);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:35px;
+}
+
+.scene-info h4{
+    font-size:14px;
+    margin-bottom:7px;
+}
+
+.scene-info p{
+    color:#6b7280;
+    font-size:12px;
+    line-height:1.5;
+}
+
+.scene-tags{
+    display:flex;
+    gap:5px;
+    flex-wrap:wrap;
+    margin-top:8px;
+}
+
+.scene-tag{
+    font-size:10px;
+    padding:4px 7px;
+    border-radius:20px;
+    background:#f3f4f6;
+}
+
+/* DASHBOARD */
+
+.stats{
+    display:grid;
+    grid-template-columns:repeat(4,1fr);
+    gap:12px;
+    margin-bottom:20px;
+}
+
+.stat{
+    background:#fff;
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:17px;
+}
+
+.stat small{
+    color:var(--muted);
+    font-size:11px;
+}
+
+.stat strong{
+    display:block;
+    font-size:23px;
+    margin-top:7px;
+}
+
+/* LOG */
+
+.log{
+    background:#10131d;
+    color:#d1d5db;
+    border-radius:12px;
+    padding:15px;
+    height:190px;
+    overflow:auto;
+    font-family:monospace;
+    font-size:11px;
+    line-height:1.8;
+}
+
+.log-success{
+    color:#4ade80;
+}
+
+.log-info{
+    color:#60a5fa;
+}
+
+.log-warning{
+    color:#fbbf24;
+}
+
+/* MODAL */
+
+.modal{
+    display:none;
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,.6);
+    z-index:500;
+    align-items:center;
+    justify-content:center;
+    padding:20px;
+}
+
+.modal.show{
+    display:flex;
+}
+
+.modal-box{
+    background:white;
+    border-radius:18px;
+    width:100%;
+    max-width:600px;
+    max-height:90vh;
+    overflow:auto;
+    padding:25px;
+}
+
+.modal-header{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:15px;
+}
+
+.close{
+    border:0;
+    background:#f3f4f6;
+    width:35px;
+    height:35px;
+    border-radius:50%;
+}
+
+/* TOAST */
+
+.toast{
+    position:fixed;
+    right:20px;
+    bottom:20px;
+    background:#111827;
+    color:white;
+    padding:13px 17px;
+    border-radius:10px;
+    font-size:13px;
+    display:none;
+    z-index:1000;
+}
+
+.toast.show{
+    display:block;
+}
+
+/* RESPONSIVE */
+
+@media(max-width:1000px){
+    .layout{
+        grid-template-columns:1fr;
+    }
+
+    .sidebar{
+        display:none;
+    }
+
+    .grid{
+        grid-template-columns:1fr;
+    }
+
+    .setting-grid,
+    .stats{
+        grid-template-columns:repeat(2,1fr);
+    }
+}
+
+@media(max-width:600px){
+    .main{
+        padding:12px;
+    }
+
+    .header{
+        padding:0 12px;
+    }
+
+    .hero{
+        padding:20px;
+    }
+
+    .hero h2{
+        font-size:22px;
+    }
+
+    .setting-grid,
+    .stats{
+        grid-template-columns:1fr;
+    }
+
+    .scene-body{
+        grid-template-columns:1fr;
+    }
+
+    .scene-visual{
+        height:130px;
+    }
+}
+</style>
+</head>
+
+<body>
+
+<div class="app">
+
+<!-- HEADER -->
+
+<header class="header">
+
+    <div class="logo-area">
+        <div class="logo">🐾</div>
+
+        <div class="logo-text">
+            <h1>Talking Tails Studio</h1>
+            <p>Every Paw Has a Story.</p>
+        </div>
+    </div>
+
+    <div class="header-right">
+        <div class="badge">PRIVATE MODE</div>
+        <div class="badge">1080p</div>
+    </div>
+
+</header>
+
+
+<div class="layout">
+
+<!-- SIDEBAR -->
+
+<aside class="sidebar">
+
+    <div class="nav-title">Studio</div>
+
+    <button class="nav-btn active" onclick="scrollToSection('scriptSection')">
+        📝 Script
+    </button>
+
+    <button class="nav-btn" onclick="scrollToSection('characterSection')">
+        🐾 Characters
+    </button>
+
+    <button class="nav-btn" onclick="scrollToSection('settingsSection')">
+        ⚙️ Production
+    </button>
+
+    <button class="nav-btn" onclick="scrollToSection('productionSection')">
+        🎬 Storyboard
+    </button>
+
+    <div class="nav-title" style="margin-top:20px;">
+        Tools
+    </div>
+
+    <button class="nav-btn" onclick="saveProject()">
+        💾 Save Project
+    </button>
+
+    <button class="nav-btn" onclick="exportProject()">
+        📦 Export JSON
+    </button>
+
+    <button class="nav-btn" onclick="resetProject()">
+        🗑️ Reset
+    </button>
+
+</aside>
+
+
+<!-- MAIN -->
+
+<main class="main">
+
+    <!-- HERO -->
+
+    <section class="hero">
+
+        <h2>🎬 AI Children's Animation Studio</h2>
+
+        <p>
+            Give the studio your story script and character reference
+            images. The system prepares scenes, characters, emotions,
+            camera directions, music, sound effects and production
+            instructions automatically.
+        </p>
+
+        <div class="tagline">
+            Talking Tails Stories — Every Paw Has a Story.
+        </div>
+
+    </section>
+
+
+    <!-- STATS -->
+
+    <div class="stats">
+
+        <div class="stat">
+            <small>Target Duration</small>
+            <strong>10:00</strong>
+        </div>
+
+        <div class="stat">
+            <small>Resolution</small>
+            <strong>1080p</strong>
+        </div>
+
+        <div class="stat">
+            <small>Aspect Ratio</small>
+            <strong>16:9</strong>
+        </div>
+
+        <div class="stat">
+            <small>Characters</small>
+            <strong id="characterCount">0</strong>
+        </div>
+
+    </div>
+
+
+    <div class="grid">
+
+        <!-- SCRIPT -->
+
+        <section class="card full" id="scriptSection">
+
+            <div class="card-header">
+
+                <h3>📝 Story Script</h3>
+
+                <span id="wordCount">
+                    0 words
+                </span>
+
+            </div>
+
+            <textarea
+                id="scriptInput"
+                placeholder="Paste your complete Talking Tails Stories script here...
+
+Example:
+
+Bella: Hello, little friends! Welcome back to Talking Tails Stories...
+
+Bruno: Look! What is that?
+
+Felix: I think we should investigate!
+
+Write the full story here. The studio will automatically divide it into scenes."
+            ></textarea>
+
+            <div class="file-row">
+
+                <label class="file-label">
+                    📂 Upload Script
+                    <input
+                        id="scriptFile"
+                        class="file-input"
+                        type="file"
+                        accept=".txt,.md"
+                    >
+                </label>
+
+                <button
+                    class="btn btn-secondary"
+                    onclick="loadDemoScript()"
+                >
+                    ✨ Load Demo Script
+                </button>
+
+                <button
+                    class="btn btn-secondary"
+                    onclick="clearScript()"
+                >
+                    Clear
+                </button>
+
+            </div>
+
+        </section>
+
+
+        <!-- CHARACTERS -->
+
+        <section class="card full" id="characterSection">
+
+            <div class="card-header">
+
+                <h3>🐾 Character Reference Images</h3>
+
+                <span>
+                    Upload your master character images
+                </span>
+
+            </div>
+
+            <div class="character-upload">
+
+                <p style="font-size:30px;margin-bottom:8px;">
+                    🐶 🦊 🐱 🐰 🦁 🐵 🐟
+                </p>
+
+                <p style="font-size:13px;color:#6b7280;margin-bottom:12px;">
+                    Select multiple character PNG/JPG images
+                </p>
+
+                <label class="btn btn-primary">
+
+                    + Add Character Images
+
+                    <input
+                        id="characterFiles"
+                        class="file-input"
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        multiple
+                    >
+
+                </label>
+
+            </div>
+
+            <div
+                id="characterGrid"
+                class="character-grid"
+            ></div>
+
+        </section>
+
+
+        <!-- SETTINGS -->
+
+        <section class="card full" id="settingsSection">
+
+            <div class="card-header">
+
+                <h3>⚙️ Automatic Production Settings</h3>
+
+                <span>
+                    Automatically controlled
+                </span>
+
+            </div>
+
+            <div class="setting-grid">
+
+                <div class="setting">
+                    <label>VIDEO STYLE</label>
+                    <strong>Premium 3D Cartoon</strong>
+                </div>
+
+                <div class="setting">
+                    <label>DURATION</label>
+                    <strong>10 Minutes</strong>
+                </div>
+
+                <div class="setting">
+                    <label>RESOLUTION</label>
+                    <strong>1920 × 1080</strong>
+                </div>
+
+                <div class="setting">
+                    <label>FRAME RATE</label>
+                    <strong>24 FPS</strong>
+                </div>
+
+                <div class="setting">
+                    <label>VOICE</label>
+                    <strong>Character Acting</strong>
+                </div>
+
+                <div class="setting">
+                    <label>LIP SYNC</label>
+                    <strong>Automatic</strong>
+                </div>
+
+                <div class="setting">
+                    <label>MUSIC</label>
+                    <strong>Emotion Based</strong>
+                </div>
+
+                <div class="setting">
+                    <label>SOUND FX</label>
+                    <strong>Automatic</strong>
+                </div>
+
+            </div>
+
+            <div class="action-row">
+
+                <button
+                    class="btn btn-primary"
+                    onclick="createVideoPlan()"
+                    style="font-size:15px;padding:14px 25px;"
+                >
+                    🎬 CREATE VIDEO
+                </button>
+
+                <button
+                    class="btn btn-secondary"
+                    onclick="saveProject()"
+                >
+                    💾 Save Project
+                </button>
+
+            </div>
+
+        </section>
+
+
+        <!-- PRODUCTION -->
+
+        <section
+            class="card full production"
+            id="productionSection"
+        >
+
+            <div class="card-header">
+
+                <h3>🎬 Production Pipeline</h3>
+
+                <span id="productionStatus">
+                    Waiting for script
+                </span>
+
+            </div>
+
+            <div class="progress-container">
+
+                <div
+                    id="progressBar"
+                    class="progress-bar"
+                ></div>
+
+            </div>
+
+            <div class="progress-text">
+
+                <span id="progressMessage">
+                    Ready
+                </span>
+
+                <strong id="progressPercent">
+                    0%
+                </strong>
+
+            </div>
+
+            <div style="margin-top:18px;">
+
+                <div class="log" id="productionLog"></div>
+
+            </div>
+
+        </section>
+
+
+        <!-- STORYBOARD -->
+
+        <section class="card full">
+
+            <div class="card-header">
+
+                <h3>🎞️ Automatic Storyboard</h3>
+
+                <span id="sceneCount">
+                    0 scenes
+                </span>
+
+            </div>
+
+            <div
+                id="sceneList"
+                class="scene-list"
+            >
+
+                <div
+                    style="
+                    padding:30px;
+                    text-align:center;
+                    color:#9ca3af;
+                    border:2px dashed #e5e7eb;
+                    border-radius:12px;
+                    "
+                >
+
+                    Your generated scenes will appear here.
+
+                    <br><br>
+
+                    Add a script and click
+                    <strong>CREATE VIDEO</strong>.
+
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <!-- EXPORT -->
+
+        <section class="card full">
+
+            <div class="card-header">
+
+                <h3>📦 Project Output</h3>
+
+                <span>
+                    Current browser version
+                </span>
+
+            </div>
+
+            <p style="
+                color:#6b7280;
+                font-size:13px;
+                line-height:1.6;
+            ">
+
+                The current version prepares the complete production
+                blueprint. The next stage can connect AI video,
+                voice, lip-sync, music and rendering APIs.
+
+            </p>
+
+            <div class="action-row">
+
+                <button
+                    class="btn btn-green"
+                    onclick="exportProject()"
+                >
+                    📦 Download Project JSON
+                </button>
+
+                <button
+                    class="btn btn-blue"
+                    onclick="downloadStoryboard()"
+                >
+                    📄 Download Storyboard
+                </button>
+
+            </div>
+
+        </section>
+
+    </div>
+
+</main>
+
+</div>
+</div>
+
+
+<!-- MODAL -->
+
+<div
+    id="modal"
+    class="modal"
+>
+
+    <div class="modal-box">
+
+        <div class="modal-header">
+
+            <h3>🐾 Talking Tails</h3>
+
+            <button
+                class="close"
+                onclick="closeModal()"
+            >
+                ✕
+            </button>
+
+        </div>
+
+        <div id="modalContent"></div>
+
+    </div>
+
+</div>
+
+
+<!-- TOAST -->
+
+<div
+    id="toast"
+    class="toast"
+></div>
+
+
+<script>
+
+/* =========================================================
+   TALKING TAILS STORIES
+   PRIVATE AI VIDEO STUDIO
+   Browser Prototype
+========================================================= */
+
+
+/* =========================
+   GLOBAL STATE
+========================= */
+
+let project = {
+
+    title: "Talking Tails Stories",
+
+    tagline: "Every Paw Has a Story.",
+
+    script: "",
+
+    characters: [],
+
+    scenes: [],
+
+    settings: {
+
+        duration: 600,
+
+        resolution: "1920x1080",
+
+        fps: 24,
+
+        aspectRatio: "16:9",
+
+        style: "Premium 3D Cartoon",
+
+        voice: "Character Acting",
+
+        lipSync: true,
+
+        music: true,
+
+        soundEffects: true
+
+    },
+
+    createdAt: null
+
+};
+
+
+/* =========================
+   DEMO SCRIPT
+========================= */
+
+const demoScript = `Bella: Hello, little friends! Welcome back to Talking Tails Stories, where every paw has a story!
+
+Bella: Today we have a very special adventure.
+
+Bruno: Look! Look! I found something near the big tree!
+
+Felix: What did you find, Bruno?
+
+Bruno: It's a tiny golden key!
+
+Milo: A golden key? I wonder what it opens.
+
+Coco: Maybe there is a secret door somewhere!
+
+Sammy: Let's look around!
+
+The friends walk through the colorful forest.
+
+Bella: Remember, little friends, the best adventures happen when friends work together.
+
+Leo: Wait! I see something behind those flowers!
+
+Leo moves the flowers and discovers a small wooden door.
+
+Felix: The key!
+
+Bruno carefully puts the golden key into the lock.
+
+The door opens slowly.
+
+Everyone looks inside with excitement.
+
+Inside they discover a beautiful garden filled with glowing flowers.
+
+Coco: Wow! It's beautiful!
+
+Milo: We found a secret friendship garden.
+
+Bella: And now we know something important.
+
+Bella: When we help each other and stay curious, even a small key can open a wonderful new world.
+
+Everyone smiles.
+
+Bruno: Best adventure ever!
+
+Bella: And that's today's story! Remember, be kind, be brave, and always help your friends.
+
+Bella: I'll see you in the next Talking Tails story!
+
+Everyone: Every paw has a story!`;
+
+
+/* =========================
+   SCRIPT FILE
+========================= */
+
+document
+.getElementById("scriptFile")
+.addEventListener("change", function(e){
+
+    const file = e.target.files[0];
+
+    if(!file) return;
+
+    const reader = new FileReader();
+
+    reader.onload = function(event){
+
+        project.script = event.target.result;
+
+        document
+        .getElementById("scriptInput")
+        .value = project.script;
+
+        updateWordCount();
+
+        showToast("Script loaded successfully.");
+
+    };
+
+    reader.readAsText(file);
+
+});
+
+
+/* =========================
+   SCRIPT INPUT
+========================= */
+
+document
+.getElementById("scriptInput")
+.addEventListener("input", function(){
+
+    project.script = this.value;
+
+    updateWordCount();
+
+});
+
+
+function updateWordCount(){
+
+    const text =
+        document
+        .getElementById("scriptInput")
+        .value
+        .trim();
+
+    const words =
+        text
+        ? text.split(/\s+/).length
+        : 0;
+
+    document
+    .getElementById("wordCount")
+    .textContent =
+        words + " words";
+
+}
+
+
+/* =========================
+   LOAD DEMO
+========================= */
+
+function loadDemoScript(){
+
+    project.script = demoScript;
+
+    document
+    .getElementById("scriptInput")
+    .value = demoScript;
+
+    updateWordCount();
+
+    showToast("Demo story loaded.");
+
+}
+
+
+/* =========================
+   CLEAR SCRIPT
+========================= */
+
+function clearScript(){
+
+    project.script = "";
+
+    document
+    .getElementById("scriptInput")
+    .value = "";
+
+    updateWordCount();
+
+}
+
+
+/* =========================
+   CHARACTER UPLOAD
+========================= */
+
+document
+.getElementById("characterFiles")
+.addEventListener("change", function(e){
+
+    const files = Array.from(e.target.files);
+
+    files.forEach(file => {
+
+        const reader = new FileReader();
+
+        reader.onload = function(event){
+
+            const character = {
+
+                id:
+                    Date.now()
+                    +
+                    Math.random()
+                    .toString(36)
+                    .substring(2,8),
+
+                name:
+                    file.name
+                    .replace(/\.[^/.]+$/,"")
+                    .replace(/[_-]/g," "),
+
+                role:"Talking Tails Character",
+
+                image:event.target.result
+
+            };
+
+            project.characters.push(character);
+
+            renderCharacters();
+
+        };
+
+        reader.readAsDataURL(file);
+
+    });
+
+});
+
+
+/* =========================
+   RENDER CHARACTERS
+========================= */
+
+function renderCharacters(){
+
+    const grid =
+        document.getElementById("characterGrid");
+
+    grid.innerHTML = "";
+
+    project.characters.forEach(character => {
+
+        const card =
+            document.createElement("div");
+
+        card.className = "character-card";
+
+        card.innerHTML = `
+
+            <img
+                class="character-image"
+                src="${character.image}"
+                alt="${character.name}"
+            >
+
+            <div class="character-info">
+
+                <input
+                    class="character-name"
+                    value="${character.name}"
+                    placeholder="Character name"
+                    onchange="renameCharacter('${character.id}',this.value)"
+                >
+
+                <div class="character-role">
+                    ${character.role}
+                </div>
+
+                <button
+                    class="btn btn-danger"
+                    style="width:100%;margin-top:8px;padding:7px;"
+                    onclick="removeCharacter('${character.id}')"
+                >
+                    Remove
+                </button>
+
+            </div>
+        `;
+
+        grid.appendChild(card);
+
+    });
+
+    document
+    .getElementById("characterCount")
+    .textContent =
+        project.characters.length;
+
+}
+
+
+function renameCharacter(id,name){
+
+    const character =
+        project.characters.find(c => c.id === id);
+
+    if(character){
+
+        character.name =
+            name.trim() || "Unnamed Character";
+
+    }
+
+}
+
+
+function removeCharacter(id){
+
+    project.characters =
+        project.characters.filter(
+            c => c.id !== id
+        );
+
+    renderCharacters();
+
+}
+
+
+/* =========================
+   SCRIPT PARSER
+========================= */
+
+function parseScript(script){
+
+    const lines =
+        script
+        .split(/\n+/)
+        .map(x => x.trim())
+        .filter(Boolean);
+
+    const scenes = [];
+
+    let current = [];
+
+    let currentCharacters = new Set();
+
+    function saveScene(){
+
+        if(current.length === 0)
+            return;
+
+        const text =
+            current.join(" ");
+
+        scenes.push({
+
+            id: scenes.length + 1,
+
+            text:text,
+
+            characters:
+                Array.from(currentCharacters),
+
+            duration:
+                estimateDuration(text),
+
+            emotion:
+                detectEmotion(text),
+
+            visual:
+                generateVisual(text),
+
+            camera:
+                generateCamera(text),
+
+            music:
+                generateMusic(text),
+
+            sound:
+                generateSound(text)
+
+        });
+
+        current = [];
+
+        currentCharacters = new Set();
+
+    }
+
+
+    lines.forEach(line => {
+
+        const match =
+            line.match(/^([^:]{1,30}):\s*(.+)$/);
+
+        if(match){
+
+            const speaker =
+                match[1].trim();
+
+            const dialogue =
+                match[2].trim();
+
+            currentCharacters.add(speaker);
+
+            current.push(
+                speaker + ": " + dialogue
+            );
+
+        }
+
+        else{
+
+            current.push(line);
+
+        }
+
+
+        if(
+            current.join(" ").split(/\s+/).length
+            >= 55
+        ){
+
+            saveScene();
+
+        }
+
+    });
+
+    saveScene();
+
+    return scenes;
+
+}
+
+
+/* =========================
+   DURATION
+========================= */
+
+function estimateDuration(text){
+
+    const words =
+        text.split(/\s+/).length;
+
+    const seconds =
+        Math.max(
+            12,
+            Math.round(words / 2.1)
+        );
+
+    return seconds;
+
+}
+
+
+/* =========================
+   EMOTION ENGINE
+========================= */
+
+function detectEmotion(text){
+
+    const t =
+        text.toLowerCase();
+
+    if(
+        t.includes("wow") ||
+        t.includes("beautiful") ||
+        t.includes("amazing")
+    )
+        return "wonder";
+
+    if(
+        t.includes("sad") ||
+        t.includes("cry") ||
+        t.includes("sorry")
+    )
+        return "sad";
+
+    if(
+        t.includes("laugh") ||
+        t.includes("funny") ||
+        t.includes("haha")
+    )
+        return "happy";
+
+    if(
+        t.includes("danger") ||
+        t.includes("scared") ||
+        t.includes("afraid")
+    )
+        return "tension";
+
+    if(
+        t.includes("excited") ||
+        t.includes("adventure") ||
+        t.includes("let's")
+    )
+        return "excited";
+
+    return "warm";
+
+}
+
+
+/* =========================
+   VISUAL ENGINE
+========================= */
+
+function generateVisual(text){
+
+    const t =
+        text.toLowerCase();
+
+    if(
+        t.includes("forest") ||
+        t.includes("tree")
+    )
+        return "Colorful magical forest";
+
+    if(
+        t.includes("door") ||
+        t.includes("key")
+    )
+        return "Mysterious hidden door";
+
+    if(
+        t.includes("garden") ||
+        t.includes("flower")
+    )
+        return "Magical glowing garden";
+
+    if(
+        t.includes("river") ||
+        t.includes("water")
+    )
+        return "Peaceful forest river";
+
+    if(
+        t.includes("night") ||
+        t.includes("moon")
+    )
+        return "Beautiful moonlit landscape";
+
+    return "Bright colorful Talking Tails environment";
+
+}
+
+
+/* =========================
+   CAMERA ENGINE
+========================= */
+
+function generateCamera(text){
+
+    const t =
+        text.toLowerCase();
+
+    if(
+        t.includes("look") ||
+        t.includes("wow")
+    )
+        return "Slow cinematic push-in";
+
+    if(
+        t.includes("run") ||
+        t.includes("walk")
+    )
+        return "Smooth tracking shot";
+
+    if(
+        t.includes("everyone")
+    )
+        return "Wide group shot";
+
+    if(
+        t.includes("secret") ||
+        t.includes("mysterious")
+    )
+        return "Slow suspense reveal";
+
+    return "Medium cinematic shot";
+
+}
+
+
+/* =========================
+   MUSIC ENGINE
+========================= */
+
+function generateMusic(text){
+
+    const emotion =
+        detectEmotion(text);
+
+    const musicMap = {
+
+        happy:
+            "Bright playful children's music",
+
+        wonder:
+            "Magical discovery music",
+
+        sad:
+            "Soft emotional piano",
+
+        tension:
+            "Gentle suspense music",
+
+        excited:
+            "Energetic adventure music",
+
+        warm:
+            "Warm friendly background music"
+
+    };
+
+    return musicMap[emotion];
+
+}
+
+
+/* =========================
+   SOUND ENGINE
+========================= */
+
+function generateSound(text){
+
+    const t =
+        text.toLowerCase();
+
+    if(t.includes("door"))
+        return "Door creak + magical sparkle";
+
+    if(t.includes("walk"))
+        return "Soft footsteps";
+
+    if(t.includes("run"))
+        return "Fast playful footsteps";
+
+    if(t.includes("water"))
+        return "Gentle water ambience";
+
+    if(t.includes("forest"))
+        return "Birds + leaves + forest ambience";
+
+    if(t.includes("laugh"))
+        return "Children-friendly laughter";
+
+    return "Natural environment ambience";
+
+}
+
+
+/* =========================
+   CHARACTER MATCHING
+========================= */
+
+function matchCharacters(scene){
+
+    const text =
+        scene.text.toLowerCase();
+
+    const matches = [];
+
+    project.characters.forEach(character => {
+
+        if(
+            text.includes(
+                character.name.toLowerCase()
+            )
+        ){
+
+            matches.push(character);
+
+        }
+
+    });
+
+    return matches;
+
+}
+
+
+/* =========================
+   CREATE VIDEO PLAN
+========================= */
+
+function createVideoPlan(){
+
+    const script =
+        document
+        .getElementById("scriptInput")
+        .value
+        .trim();
+
+    if(!script){
+
+        showToast(
+            "Please add a script first."
+        );
+
+        return;
+
+    }
+
+
+    project.script = script;
+
+    project.createdAt =
+        new Date().toISOString();
+
+
+    const production =
+        document
+        .getElementById("productionSection");
+
+    production.classList.add("show");
+
+    scrollToSection("productionSection");
+
+    runProduction();
+
+}
+
+
+/* =========================
+   PRODUCTION PIPELINE
+========================= */
+
+function runProduction(){
+
+    const log =
+        document.getElementById("productionLog");
+
+    log.innerHTML = "";
+
+    const steps = [
+
+        {
+            percent:10,
+            message:"Reading story script..."
+        },
+
+        {
+            percent:20,
+            message:"Understanding characters and dialogue..."
+        },
+
+        {
+            percent:35,
+            message:"Breaking story into cinematic scenes..."
+        },
+
+        {
+            percent:50,
+            message:"Planning emotions and body language..."
+        },
+
+        {
+            percent:62,
+            message:"Planning camera movement and shots..."
+        },
+
+        {
+            percent:74,
+            message:"Selecting music and sound effects..."
+        },
+
+        {
+            percent:86,
+            message:"Building children's animation storyboard..."
+        },
+
+        {
+            percent:100,
+            message:"Production blueprint completed."
+        }
+
+    ];
+
+
+    let index = 0;
+
+
+    function nextStep(){
+
+        if(index >= steps.length){
+
+            finishProduction();
+
+            return;
+
+        }
+
+        const step =
+            steps[index];
+
+        updateProgress(
+            step.percent,
+            step.message
+        );
+
+        addLog(
+            step.message,
+            step.percent === 100
+            ? "success"
+            : "info"
+        );
+
+        index++;
+
+        setTimeout(
+            nextStep,
+            500
+        );
+
+    }
+
+
+    nextStep();
+
+}
+
+
+/* =========================
+   PROGRESS
+========================= */
+
+function updateProgress(percent,message){
+
+    document
+    .getElementById("progressBar")
+    .style.width =
+        percent + "%";
+
+    document
+    .getElementById("progressPercent")
+    .textContent =
+        percent + "%";
+
+    document
+    .getElementById("progressMessage")
+    .textContent =
+        message;
+
+    document
+    .getElementById("productionStatus")
+    .textContent =
+        message;
+
+}
+
+
+function addLog(message,type){
+
+    const log =
+        document.getElementById("productionLog");
+
+    const line =
+        document.createElement("div");
+
+    line.className =
+        type === "success"
+        ? "log-success"
+        : type === "warning"
+        ? "log-warning"
+        : "log-info";
+
+    line.textContent =
+        "> " + message;
+
+    log.appendChild(line);
+
+    log.scrollTop =
+        log.scrollHeight;
+
+}
+
+
+/* =========================
+   FINISH
+========================= */
+
+function finishProduction(){
+
+    project.scenes =
+        parseScript(project.script);
+
+
+    project.scenes.forEach(scene => {
+
+        scene.matchedCharacters =
+            matchCharacters(scene)
+            .map(c => c.name);
+
+    });
+
+
+    renderScenes();
+
+    document
+    .getElementById("sceneCount")
+    .textContent =
+        project.scenes.length + " scenes";
+
+
+    addLog(
+        "Storyboard generated successfully.",
+        "success"
+    );
+
+    addLog(
+        "Character consistency plan created.",
+        "success"
+    );
+
+    addLog(
+        "Emotion and music timing created.",
+        "success"
+    );
+
+    addLog(
+        "Camera and sound design created.",
+        "success"
+    );
+
+    showToast(
+        "Video production plan completed!"
+    );
+
+}
+
+
+/* =========================
+   RENDER SCENES
+========================= */
+
+function renderScenes(){
+
+    const container =
+        document.getElementById("sceneList");
+
+    container.innerHTML = "";
+
+
+    if(!project.scenes.length){
+
+        container.innerHTML = `
+            <div style="
+                padding:30px;
+                text-align:center;
+                color:#9ca3af;
+            ">
+                No scenes found.
+            </div>
+        `;
+
+        return;
+
+    }
+
+
+    project.scenes.forEach(scene => {
+
+        const div =
+            document.createElement("div");
+
+        div.className = "scene";
+
+
+        const chars =
+            scene.matchedCharacters &&
+            scene.matchedCharacters.length
+            ? scene.matchedCharacters
+            : scene.characters;
+
+
+        div.innerHTML = `
+
+            <div class="scene-top">
+
+                <div class="scene-number">
+                    Scene ${scene.id}
+                </div>
+
+                <div class="scene-duration">
+                    ${scene.duration}s
+                </div>
+
+            </div>
+
+
+            <div class="scene-body">
+
+                <div class="scene-visual">
+
+                    ${getVisualEmoji(scene.visual)}
+
+                </div>
+
+
+                <div class="scene-info">
+
+                    <h4>
+                        ${escapeHTML(scene.visual)}
+                    </h4>
+
+                    <p>
+                        ${escapeHTML(scene.text)}
+                    </p>
+
+
+                    <div class="scene-tags">
+
+                        <span class="scene-tag">
+                            🎭 ${escapeHTML(scene.emotion)}
+                        </span>
+
+                        <span class="scene-tag">
+                            🎥 ${escapeHTML(scene.camera)}
+                        </span>
+
+                        <span class="scene-tag">
+                            🎵 ${escapeHTML(scene.music)}
+                        </span>
+
+                        <span class="scene-tag">
+                            🔊 ${escapeHTML(scene.sound)}
+                        </span>
+
+                    </div>
+
+
+                    <div
+                        style="
+                        margin-top:9px;
+                        font-size:11px;
+                        color:#6b7280;
+                        "
+                    >
+
+                        🐾 Characters:
+                        ${
+                            chars.length
+                            ? escapeHTML(chars.join(", "))
+                            : "Auto-detect"
+
+                        }
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        `;
+
+
+        container.appendChild(div);
+
+    });
+
+}
+
+
+/* =========================
+   VISUAL EMOJI
+========================= */
+
+function getVisualEmoji(visual){
+
+    if(
+        visual.includes("forest")
+    )
+        return "🌳";
+
+    if(
+        visual.includes("door")
+    )
+        return "🚪";
+
+    if(
+        visual.includes("garden")
+    )
+        return "🌸";
+
+    if(
+        visual.includes("river")
+    )
+        return "🌊";
+
+    if(
+        visual.includes("moon")
+    )
+        return "🌙";
+
+    return "🎬";
+
+}
+
+
+/* =========================
+   HTML ESCAPE
+========================= */
+
+function escapeHTML(text){
+
+    return String(text)
+        .replace(/&/g,"&amp;")
+        .replace(/</g,"&lt;")
+        .replace(/>/g,"&gt;")
+        .replace(/"/g,"&quot;")
+        .replace(/'/g,"&#039;");
+
+}
+
+
+/* =========================
+   SAVE PROJECT
+========================= */
+
+function saveProject(){
+
+    project.script =
+        document
+        .getElementById("scriptInput")
+        .value;
+
+    localStorage.setItem(
+        "talkingTailsProject",
+        JSON.stringify(project)
+    );
+
+    showToast(
+        "Project saved in this browser."
+    );
+
+}
+
+
+/* =========================
+   LOAD PROJECT
+========================= */
+
+function loadProject(){
+
+    const saved =
+        localStorage.getItem(
+            "talkingTailsProject"
+        );
+
+    if(!saved)
+        return;
+
+    try{
+
+        project =
+            JSON.parse(saved);
+
+        document
+        .getElementById("scriptInput")
+        .value =
+            project.script || "";
+
+        renderCharacters();
+
+        updateWordCount();
+
+        if(project.scenes?.length){
+
+            renderScenes();
+
+            document
+            .getElementById("sceneCount")
+            .textContent =
+                project.scenes.length
+                + " scenes";
+
+        }
+
+    }
+
+    catch(error){
+
+        console.error(error);
+
+    }
+
+}
+
+
+/* =========================
+   EXPORT JSON
+========================= */
+
+function exportProject(){
+
+    project.script =
+        document
+        .getElementById("scriptInput")
+        .value;
+
+    const data =
+        JSON.stringify(
+            project,
+            null,
+            2
+        );
+
+    downloadFile(
+        data,
+        "talking-tails-project.json",
+        "application/json"
+    );
+
+    showToast(
+        "Project JSON downloaded."
+    );
+
+}
+
+
+/* =========================
+   STORYBOARD DOWNLOAD
+========================= */
+
+function downloadStoryboard(){
+
+    if(!project.scenes.length){
+
+        showToast(
+            "Create the video plan first."
+        );
+
+        return;
+
+    }
+
+
+    let output =
+        "TALKING TAILS STORIES\n";
+
+    output +=
+        "Every Paw Has a Story.\n\n";
+
+    output +=
+        "AUTOMATIC STORYBOARD\n";
+
+    output +=
+        "====================\n\n";
+
+
+    project.scenes.forEach(scene => {
+
+        output +=
+            `SCENE ${scene.id}\n`;
+
+        output +=
+            `Duration: ${scene.duration}s\n`;
+
+        output +=
+            `Visual: ${scene.visual}\n`;
+
+        output +=
+            `Emotion: ${scene.emotion}\n`;
+
+        output +=
+            `Camera: ${scene.camera}\n`;
+
+        output +=
+            `Music: ${scene.music}\n`;
+
+        output +=
+            `Sound: ${scene.sound}\n`;
+
+        output +=
+            `Characters: ${
+                scene.matchedCharacters?.join(", ")
+                || scene.characters.join(", ")
+            }\n`;
+
+        output +=
+            `Dialogue/Narration:\n`;
+
+        output +=
+            scene.text + "\n\n";
+
+        output +=
+            "--------------------\n\n";
+
+    });
+
+
+    downloadFile(
+        output,
+        "talking-tails-storyboard.txt",
+        "text/plain"
+    );
+
+}
+
+
+/* =========================
+   DOWNLOAD
+========================= */
+
+function downloadFile(
+    content,
+    filename,
+    type
+){
+
+    const blob =
+        new Blob(
+            [content],
+            {type:type}
+        );
+
+    const url =
+        URL.createObjectURL(blob);
+
+    const a =
+        document.createElement("a");
+
+    a.href = url;
+
+    a.download = filename;
+
+    document.body.appendChild(a);
+
+    a.click();
+
+    a.remove();
+
+    URL.revokeObjectURL(url);
+
+}
+
+
+/* =========================
+   RESET
+========================= */
+
+function resetProject(){
+
+    const ok =
+        confirm(
+            "Are you sure you want to reset the project?"
+        );
+
+    if(!ok)
+        return;
+
+    localStorage.removeItem(
+        "talkingTailsProject"
+    );
+
+    project = {
+
+        title:"Talking Tails Stories",
+
+        tagline:"Every Paw Has a Story.",
+
+        script:"",
+
+        characters:[],
+
+        scenes:[],
+
+        settings:{
+
+            duration:600,
+
+            resolution:"1920x1080",
+
+            fps:24,
+
+            aspectRatio:"16:9",
+
+            style:"Premium 3D Cartoon",
+
+            voice:"Character Acting",
+
+            lipSync:true,
+
+            music:true,
+
+            soundEffects:true
+
+        },
+
+        createdAt:null
+
+    };
+
+
+    document
+    .getElementById("scriptInput")
+    .value = "";
+
+    document
+    .getElementById("characterGrid")
+    .innerHTML = "";
+
+    document
+    .getElementById("sceneList")
+    .innerHTML = `
+
+        <div style="
+        padding:30px;
+        text-align:center;
+        color:#9ca3af;
+        border:2px dashed #e5e7eb;
+        border-radius:12px;
+        ">
+
+            Your generated scenes will appear here.
+
+        </div>
+
+    `;
+
+    document
+    .getElementById("characterCount")
+    .textContent = "0";
+
+    document
+    .getElementById("sceneCount")
+    .textContent = "0 scenes";
+
+    updateWordCount();
+
+    showToast(
+        "Project reset."
+    );
+
+}
+
+
+/* =========================
+   NAVIGATION
+========================= */
+
+function scrollToSection(id){
+
+    const element =
+        document.getElementById(id);
+
+    if(element){
+
+        element.scrollIntoView({
+            behavior:"smooth",
+            block:"start"
+        });
+
+    }
+
+}
+
+
+/* =========================
+   TOAST
+========================= */
+
+function showToast(message){
+
+    const toast =
+        document.getElementById("toast");
+
+    toast.textContent =
+        message;
+
+    toast.classList.add("show");
+
+    setTimeout(
+        () => toast.classList.remove("show"),
+        2500
+    );
+
+}
+
+
+/* =========================
+   MODAL
+========================= */
+
+function closeModal(){
+
+    document
+    .getElementById("modal")
+    .classList.remove("show");
+
+}
+
+
+/* =========================
+   INITIALIZE
+========================= */
+
+loadProject();
+
+updateWordCount();
+
+
+/* =========================
+   DEMO STARTUP LOG
+========================= */
+
+console.log(
+`
+====================================
+ TALKING TAILS STORIES
+ AI VIDEO STUDIO
+====================================
+
+Current mode:
+LOCAL BROWSER PROTOTYPE
+
+Input:
+SCRIPT + CHARACTER IMAGES
+
+Planned output:
+10-MINUTE 1080P CHILDREN'S VIDEO
+
+Next integration:
+AI VIDEO API
+VOICE API
+LIP SYNC
+MUSIC
+SFX
+VIDEO RENDERING
+
+====================================
+`
+);
+
+</script>
+
+</body>
+</html>
