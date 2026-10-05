@@ -1173,9 +1173,9 @@ Write the full story here. The studio will automatically divide it into scenes."
                 line-height:1.6;
             ">
 
-                The current version prepares the complete production
-                blueprint. The next stage can connect AI video,
-                voice, lip-sync, music and rendering APIs.
+                Create Video now sends the first generated scene to Kling through
+                the secure Supabase Edge Function. When Kling finishes,
+                the video appears above for preview and download.
 
             </p>
 
@@ -2203,33 +2203,39 @@ function setVideoOutput(url){
     const player = document.getElementById("videoPlayer");
     const download = document.getElementById("downloadVideoBtn");
 
-    if(generatedVideoUrl && generatedVideoUrl !== url){
-        try{ URL.revokeObjectURL(generatedVideoUrl); }catch(e){}
+    if(!url){
+        throw new Error("Kling returned an empty video URL.");
     }
 
     generatedVideoUrl = url;
+
     player.src = url;
     player.load();
 
     download.href = url;
+    download.download = "talking-tails-kling-video.mp4";
     download.style.pointerEvents = "auto";
     download.style.opacity = "1";
 
     output.style.display = "block";
+
+    output.scrollIntoView({
+        behavior:"smooth",
+        block:"center"
+    });
 }
 
 function getKlingImageUrl(){
 
-    // The current browser character uploader stores data URLs locally.
-    // Kling needs a publicly reachable image URL, so use the verified
-    // Bruno image in Supabase unless a public URL is supplied later.
     return DEFAULT_KLING_IMAGE;
 }
 
 function buildKlingPrompt(scene){
 
     const characterText =
-        scene && scene.matchedCharacters && scene.matchedCharacters.length
+        scene &&
+        scene.matchedCharacters &&
+        scene.matchedCharacters.length
         ? scene.matchedCharacters.join(", ")
         : "Talking Tails animal characters";
 
@@ -2238,9 +2244,18 @@ function buildKlingPrompt(scene){
         "Keep the character appearance consistent with the reference image.",
         "Characters: " + characterText + ".",
         "Scene: " + (scene ? scene.text : project.script).slice(0, 900),
-        "Visual direction: " + (scene ? scene.visual : "warm colorful family-friendly environment") + ".",
-        "Camera: " + (scene ? scene.camera : "cinematic medium shot with gentle movement") + ".",
-        "Emotion: " + (scene ? scene.emotion : "happy and expressive") + ".",
+        "Visual direction: " +
+            (scene
+                ? scene.visual
+                : "warm colorful family-friendly environment") + ".",
+        "Camera: " +
+            (scene
+                ? scene.camera
+                : "cinematic medium shot with gentle movement") + ".",
+        "Emotion: " +
+            (scene
+                ? scene.emotion
+                : "happy and expressive") + ".",
         "No text, no subtitles, no watermark, child-safe, polished 3D animation."
     ].join(" ");
 }
@@ -2251,18 +2266,24 @@ function extractKlingTaskId(data){
            data?.kling?.task_id ||
            data?.data?.task_id ||
            data?.task_id ||
+           data?.result?.task_id ||
            null;
 }
 
 function extractKlingVideoUrl(data){
 
     return data?.kling?.data?.task_result?.videos?.[0]?.url ||
+           data?.kling?.data?.task_result?.videos?.[0]?.video_url ||
            data?.kling?.data?.task_result?.video_url ||
            data?.kling?.data?.video_url ||
            data?.kling?.video_url ||
            data?.data?.task_result?.videos?.[0]?.url ||
+           data?.data?.task_result?.videos?.[0]?.video_url ||
+           data?.data?.task_result?.video_url ||
            data?.data?.video_url ||
+           data?.result?.video_url ||
            data?.video_url ||
+           data?.url ||
            null;
 }
 
@@ -2270,9 +2291,13 @@ function extractKlingStatus(data){
 
     return String(
         data?.kling?.data?.task_status ||
+        data?.kling?.data?.status ||
         data?.kling?.task_status ||
+        data?.kling?.status ||
         data?.data?.task_status ||
-        data?.task_status ||
+        data?.data?.status ||
+        data?.result?.status ||
+        data?.status ||
         ""
     ).toLowerCase();
 }
@@ -2290,17 +2315,21 @@ async function klingRequest(body){
         }
     );
 
+    const raw = await response.text();
+
     let data = null;
 
     try{
-        data = await response.json();
+        data = raw ? JSON.parse(raw) : {};
     }
     catch(error){
-        const text = await response.text();
-        throw new Error(text || "Kling server returned an invalid response.");
+        throw new Error(
+            raw || "Kling server returned an invalid response."
+        );
     }
 
     if(!response.ok || data?.success === false){
+
         throw new Error(
             data?.details ||
             data?.error ||
@@ -2312,10 +2341,23 @@ async function klingRequest(body){
     return data;
 }
 
-async function generateKlingVideo(){
+function setCreateVideoButton(loading){
 
     const button =
-        document.querySelector('button[onclick="createVideoPlan()"]');
+        document.querySelector(
+            'button[onclick="createVideoPlan()"]'
+        );
+
+    if(!button) return;
+
+    button.disabled = loading;
+    button.textContent =
+        loading
+        ? "⏳ Creating Video..."
+        : "🎬 CREATE VIDEO";
+}
+
+async function generateKlingVideo(){
 
     const scene =
         project.scenes.length
@@ -2327,65 +2369,103 @@ async function generateKlingVideo(){
         klingPollTimer = null;
     }
 
-    if(button){
-        button.disabled = true;
-        button.textContent = "⏳ Creating Kling Video...";
-    }
+    setCreateVideoButton(true);
 
     try{
 
-        updateProgress(10,"Sending scene to Kling...");
-        addLog("Sending first scene to Kling AI...","info");
+        updateProgress(
+            5,
+            "Preparing Kling video..."
+        );
 
-        const data = await klingRequest({
-            image: getKlingImageUrl(),
-            prompt: buildKlingPrompt(scene)
-        });
+        addLog(
+            "Preparing the first cinematic scene...",
+            "info"
+        );
 
-        const directUrl = extractKlingVideoUrl(data);
+        const data =
+            await klingRequest({
+                image: getKlingImageUrl(),
+                prompt: buildKlingPrompt(scene)
+            });
+
+        console.log("Kling response:", data);
+
+        const directUrl =
+            extractKlingVideoUrl(data);
 
         if(directUrl){
+
             setVideoOutput(directUrl);
-            updateProgress(100,"Kling video ready.");
-            addLog("Kling video generated successfully.","success");
-            showToast("Video generated successfully.");
+
+            updateProgress(
+                100,
+                "Video ready."
+            );
+
+            addLog(
+                "Kling video generated successfully.",
+                "success"
+            );
+
+            showToast(
+                "🎬 Video ready!"
+            );
+
             return;
         }
 
-        const taskId = extractKlingTaskId(data);
+        const taskId =
+            extractKlingTaskId(data);
 
         if(!taskId){
-            throw new Error("Kling returned no task_id or video URL.");
+
+            throw new Error(
+                "Kling did not return a task ID or video URL. Check the Kling Edge Function response."
+            );
         }
 
-        updateProgress(25,"Kling task submitted. Waiting for video...");
-        addLog("Kling task submitted: " + taskId,"info");
+        updateProgress(
+            15,
+            "Kling task submitted. Generating video..."
+        );
+
+        addLog(
+            "Kling task submitted: " + taskId,
+            "info"
+        );
 
         await pollKlingVideo(taskId);
 
     }
     catch(error){
 
-        console.error("Kling video error:",error);
-        updateProgress(0,"Kling video generation failed.");
-        addLog("Kling error: " + (error.message || "Unknown error"),"warning");
-        showToast("Kling error: " + (error.message || "Unknown error"));
+        console.error(
+            "Kling video error:",
+            error
+        );
 
-    }
-    finally{
+        updateProgress(
+            0,
+            "Video generation failed."
+        );
 
-        if(button){
-            button.disabled = false;
-            button.textContent = "🎬 CREATE VIDEO";
-        }
+        addLog(
+            "Kling error: " +
+            (error.message || "Unknown error"),
+            "warning"
+        );
+
+        showToast(
+            "Kling error: " +
+            (error.message || "Unknown error")
+        );
 
     }
 }
 
 async function pollKlingVideo(taskId){
 
-    // The Edge Function must accept { action:"status", task_id } and
-    // return the Kling status/result while keeping KLING_API_KEY server-side.
     const maxAttempts = 60;
     let attempt = 0;
 
@@ -2393,39 +2473,103 @@ async function pollKlingVideo(taskId){
 
         attempt++;
 
-        const data = await klingRequest({
-            action:"status",
-            task_id:taskId
-        });
+        let data;
 
-        const url = extractKlingVideoUrl(data);
-        const status = extractKlingStatus(data);
+        try{
+
+            data = await klingRequest({
+                action:"status",
+                task_id:taskId
+            });
+
+        }
+        catch(error){
+
+            // If the Edge Function does not support status polling,
+            // show a clear message instead of looping forever.
+            throw new Error(
+                "Kling task was created, but the status check failed: " +
+                (error.message || "Unknown error")
+            );
+
+        }
+
+        console.log(
+            "Kling status response:",
+            data
+        );
+
+        const url =
+            extractKlingVideoUrl(data);
+
+        const status =
+            extractKlingStatus(data);
 
         if(url){
+
             setVideoOutput(url);
-            updateProgress(100,"Kling video ready.");
-            addLog("Kling video is ready for preview and download.","success");
-            showToast("Video generated successfully.");
+
+            updateProgress(
+                100,
+                "Video ready."
+            );
+
+            addLog(
+                "Kling video is ready for preview and download.",
+                "success"
+            );
+
+            showToast(
+                "🎬 Video generated successfully!"
+            );
+
             return;
         }
 
-        if(status === "failed" || status === "error"){
-            throw new Error("Kling task failed.");
+        if(
+            status === "failed" ||
+            status === "error" ||
+            status === "canceled" ||
+            status === "cancelled"
+        ){
+
+            throw new Error(
+                "Kling task failed. Status: " +
+                status
+            );
         }
 
-        const percent = Math.min(95, 25 + Math.round((attempt / maxAttempts) * 70));
-        updateProgress(percent,"Kling is generating the video... (" + status + ")");
+        const percent =
+            Math.min(
+                95,
+                15 +
+                Math.round(
+                    (attempt / maxAttempts) * 80
+                )
+            );
+
+        updateProgress(
+            percent,
+            "Kling is generating the video..." +
+            (status ? " Status: " + status : "")
+        );
 
         if(attempt >= maxAttempts){
-            throw new Error("Kling is still processing. Please try again shortly.");
+
+            throw new Error(
+                "Kling is still processing. Please check again shortly."
+            );
         }
 
-        klingPollTimer = setTimeout(check,5000);
+        klingPollTimer =
+            setTimeout(
+                check,
+                5000
+            );
     }
 
     await check();
 }
-
 
 /* =========================
    PRODUCTION PIPELINE
