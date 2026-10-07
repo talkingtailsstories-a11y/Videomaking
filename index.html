@@ -624,48 +624,6 @@ input:focus{
     display:block;
 }
 
-/* MAGIC HOUR VIDEO OUTPUT */
-
-.video-output{
-    margin-top:18px;
-    display:none;
-    border:1px solid var(--border);
-    border-radius:14px;
-    padding:15px;
-    background:#fafafa;
-}
-
-.video-output.show{
-    display:block;
-}
-
-.video-output video{
-    width:100%;
-    max-height:520px;
-    border-radius:12px;
-    background:#111827;
-    display:block;
-}
-
-.video-output-title{
-    font-size:13px;
-    font-weight:bold;
-    margin-bottom:10px;
-}
-
-.video-output-actions{
-    display:flex;
-    gap:10px;
-    flex-wrap:wrap;
-    margin-top:12px;
-}
-
-.video-output-actions a{
-    text-decoration:none;
-    display:inline-flex;
-    align-items:center;
-}
-
 /* RESPONSIVE */
 
 @media(max-width:1000px){
@@ -1139,19 +1097,24 @@ Write the full story here. The studio will automatically divide it into scenes."
                 line-height:1.6;
             ">
 
-                The studio prepares the storyboard and then sends the
-                character reference to Magic Hour Wan 2.2 for real AI
-                video generation. The generated video appears below.
+                The current version prepares the complete production
+                blueprint. The next stage can connect AI video,
+                voice, lip-sync, music and rendering APIs.
 
             </p>
 
-            <div id="videoOutput" class="video-output">
-                <div class="video-output-title">🎬 Generated Video</div>
-                <video id="generatedVideo" controls playsinline></video>
-                <div class="video-output-actions">
-                    <a id="generatedVideoLink" class="btn btn-blue" href="#" target="_blank" rel="noopener">▶ Open Video</a>
-                    <a id="generatedVideoDownload" class="btn btn-green" href="#" target="_blank" rel="noopener">⬇️ Download Video</a>
+            <div id="magicHourOutput" style="margin-top:18px;display:none;">
+
+                <div style="padding:16px;border:1px solid #e5e7eb;border-radius:12px;background:#fafafa;">
+                    <div style="font-weight:700;margin-bottom:8px;">🎬 AI Video Output</div>
+                    <div id="magicHourStatus" style="font-size:13px;color:#6b7280;margin-bottom:12px;">Ready</div>
+                    <video id="magicHourVideo" controls playsinline style="width:100%;max-height:480px;border-radius:10px;background:#111;display:none;"></video>
+                    <div class="action-row" style="margin-top:12px;">
+                        <a id="magicHourDownload" class="btn btn-green" href="#" target="_blank" rel="noopener" style="display:none;text-decoration:none;">⬇️ Open / Download Video</a>
+                        <button id="generateNextSceneBtn" class="btn btn-primary" onclick="generateNextMagicHourScene()" style="display:none;">🎬 Generate Next Scene</button>
+                    </div>
                 </div>
+
             </div>
 
             <div class="action-row">
@@ -1940,202 +1903,32 @@ function createVideoPlan(){
         .trim();
 
     if(!script){
-        showToast("Please add a script first.");
-        return;
-    }
 
-    project.script = script;
-    project.createdAt = new Date().toISOString();
-
-    const production = document.getElementById("productionSection");
-    production.classList.add("show");
-    scrollToSection("productionSection");
-
-    // First build the existing storyboard, then start the real Magic Hour video.
-    runProduction();
-}
-
-
-/* =========================
-   MAGIC HOUR VIDEO API
-========================= */
-
-const MAGIC_HOUR_VIDEO_API =
-    "https://dugkzhwwlvuckvhgcxza.supabase.co/functions/v1/magichour-video";
-
-const DEFAULT_CHARACTER_IMAGE =
-    "https://dugkzhwwlvuckvhgcxza.supabase.co/storage/v1/object/public/talking-tails/Burno.jpg";
-
-let magicHourPollTimer = null;
-
-function getVideoImage(){
-    // If a future character is stored as a public URL, use it.
-    // Browser-uploaded data URLs are not sent to the API; use the working
-    // Supabase Burno image instead.
-    const first = project.characters && project.characters[0];
-    if(first && first.image && /^https?:\/\//i.test(first.image)){
-        return first.image;
-    }
-    return DEFAULT_CHARACTER_IMAGE;
-}
-
-function getVideoPrompt(){
-    const scene = project.scenes && project.scenes[0];
-    const visual = scene ? scene.visual : "a colorful magical children's forest";
-    const emotion = scene ? scene.emotion : "warm and friendly";
-    const camera = scene ? scene.camera : "smooth cinematic shot";
-
-    return [
-        "Premium 3D children's cartoon animation.",
-        "Keep the main character visually consistent with the reference image.",
-        "Cute expressive acting, natural body movement, friendly face, polished cinematic lighting.",
-        "Scene: " + visual + ".",
-        "Emotion: " + emotion + ".",
-        "Camera: " + camera + ".",
-        "No text, no subtitles, no watermark, no extra characters appearing suddenly."
-    ].join(" ");
-}
-
-async function startMagicHourVideo(){
-    const log = document.getElementById("productionLog");
-
-    updateProgress(90, "Sending character image to Magic Hour...");
-    addLog("Starting Magic Hour Wan 2.2 video generation...", "info");
-
-    try{
-        const response = await fetch(MAGIC_HOUR_VIDEO_API, {
-            method: "POST",
-            headers: {"Content-Type":"application/json"},
-            body: JSON.stringify({
-                image: getVideoImage(),
-                prompt: getVideoPrompt()
-            })
-        });
-
-        const data = await response.json().catch(() => ({}));
-
-        if(!response.ok || !data.success || !data.project?.id){
-            throw new Error(
-                data?.project?.message ||
-                data?.error?.message ||
-                data?.error ||
-                "Magic Hour could not start the video."
-            );
-        }
-
-        project.video = {
-            provider: "Magic Hour",
-            model: "wan-2.2",
-            projectId: data.project.id,
-            status: "queued",
-            url: null
-        };
-
-        addLog("Magic Hour project created: " + data.project.id, "success");
-        updateProgress(92, "Magic Hour is generating the video...");
-
-        pollMagicHourVideo(data.project.id);
-
-    }catch(error){
-        console.error(error);
-        addLog("Video generation failed: " + error.message, "warning");
-        updateProgress(0, "Video generation failed.");
-        showToast("Video generation failed: " + error.message);
-    }
-}
-
-async function pollMagicHourVideo(projectId){
-    if(magicHourPollTimer){
-        clearTimeout(magicHourPollTimer);
-        magicHourPollTimer = null;
-    }
-
-    try{
-        const response = await fetch(MAGIC_HOUR_VIDEO_API, {
-            method: "POST",
-            headers: {"Content-Type":"application/json"},
-            body: JSON.stringify({
-                action: "status",
-                project_id: projectId
-            })
-        });
-
-        const data = await response.json().catch(() => ({}));
-
-        if(!response.ok || !data.success || !data.project){
-            throw new Error(
-                data?.project?.message ||
-                data?.error?.message ||
-                data?.error ||
-                "Could not check Magic Hour status."
-            );
-        }
-
-        const status = data.project.status;
-        const videoUrl =
-            data.project?.download?.url ||
-            data.project?.downloads?.[0]?.url ||
-            null;
-
-        if(project.video){
-            project.video.status = status;
-            project.video.url = videoUrl;
-            project.video.expiresAt =
-                data.project?.download?.expires_at ||
-                data.project?.downloads?.[0]?.expires_at ||
-                null;
-        }
-
-        if(status === "complete" && videoUrl){
-            clearTimeout(magicHourPollTimer);
-            magicHourPollTimer = null;
-
-            updateProgress(100, "Video generated successfully!");
-            addLog("Magic Hour video generation completed.", "success");
-            showGeneratedVideo(videoUrl);
-            showToast("Your video is ready!");
-            return;
-        }
-
-        if(status === "failed" || status === "error"){
-            throw new Error(
-                data.project?.error?.message ||
-                data.project?.error ||
-                "Magic Hour video generation failed."
-            );
-        }
-
-        const progress = status === "processing" ? 96 : 93;
-        updateProgress(progress, "Magic Hour status: " + status + "...");
-
-        magicHourPollTimer = setTimeout(
-            () => pollMagicHourVideo(projectId),
-            5000
+        showToast(
+            "Please add a script first."
         );
 
-    }catch(error){
-        console.error(error);
-        addLog("Status check failed: " + error.message, "warning");
-        updateProgress(0, "Video status check failed.");
-        showToast("Video status check failed: " + error.message);
+        return;
+
     }
-}
 
-function showGeneratedVideo(url){
-    const box = document.getElementById("videoOutput");
-    const video = document.getElementById("generatedVideo");
-    const link = document.getElementById("generatedVideoLink");
-    const download = document.getElementById("generatedVideoDownload");
 
-    video.src = url;
-    link.href = url;
-    download.href = url;
+    project.script = script;
 
-    box.classList.add("show");
+    project.createdAt =
+        new Date().toISOString();
 
-    setTimeout(() => {
-        box.scrollIntoView({behavior:"smooth", block:"center"});
-    }, 150);
+
+    const production =
+        document
+        .getElementById("productionSection");
+
+    production.classList.add("show");
+
+    scrollToSection("productionSection");
+
+    runProduction();
+
 }
 
 
@@ -2294,6 +2087,146 @@ function addLog(message,type){
 
 
 /* =========================
+   MAGIC HOUR VIDEO ENGINE
+========================= */
+
+const MAGIC_HOUR_FUNCTION_URL =
+    "https://dugkzhwwlvuckvhgcxza.supabase.co/functions/v1/magichour-video";
+
+const MAGIC_HOUR_IMAGE_URL =
+    "https://dugkzhwwlvuckvhgcxza.supabase.co/storage/v1/object/public/talking-tails/Burno.jpg";
+
+let magicHourSceneIndex = 0;
+let magicHourBusy = false;
+
+function buildMagicHourPrompt(scene){
+
+    const chars =
+        scene.matchedCharacters?.length
+        ? scene.matchedCharacters.join(", ")
+        : "Talking Tails characters";
+
+    return `Premium 3D children's cartoon animation. Keep the character appearance consistent with the reference image. Characters: ${chars}. Scene: ${scene.text}. Environment: ${scene.visual}. Emotion: ${scene.emotion}. Camera: ${scene.camera}. Natural character acting, gentle body movement, expressive face, cinematic lighting, smooth motion, child-friendly, no text, no subtitles, no watermark.`;
+}
+
+function showMagicHourOutput(message){
+    document.getElementById("magicHourOutput").style.display = "block";
+    document.getElementById("magicHourStatus").textContent = message;
+}
+
+async function magicHourRequest(body){
+    const response = await fetch(MAGIC_HOUR_FUNCTION_URL,{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify(body)
+    });
+    const data = await response.json().catch(()=>({}));
+    if(!response.ok || data.success === false){
+        throw new Error(data.error?.message || data.error || data.project?.message || "Magic Hour request failed.");
+    }
+    return data;
+}
+
+async function generateMagicHourScene(sceneIndex){
+
+    if(magicHourBusy) return;
+
+    if(!project.scenes?.length){
+        showToast("Create the video plan first.");
+        return;
+    }
+
+    if(sceneIndex >= project.scenes.length){
+        showMagicHourOutput("All storyboard scenes have been generated.");
+        return;
+    }
+
+    magicHourBusy = true;
+    magicHourSceneIndex = sceneIndex;
+
+    const scene = project.scenes[sceneIndex];
+    showMagicHourOutput(`Generating Scene ${scene.id} with Wan 2.2...`);
+    addLog(`Magic Hour: starting Scene ${scene.id}...`,"info");
+    updateProgress(90,`Generating AI video for Scene ${scene.id}...`);
+
+    try{
+        const created = await magicHourRequest({
+            image: MAGIC_HOUR_IMAGE_URL,
+            prompt: buildMagicHourPrompt(scene)
+        });
+
+        const projectId = created.project?.id;
+        if(!projectId) throw new Error("Magic Hour did not return a project ID.");
+
+        let completed = false;
+
+        for(let attempt=0; attempt<120; attempt++){
+            await new Promise(r=>setTimeout(r,5000));
+
+            const status = await magicHourRequest({
+                action:"status",
+                project_id:projectId
+            });
+
+            const mh = status.project || {};
+            const state = String(mh.status || "").toLowerCase();
+            showMagicHourOutput(`Scene ${scene.id}: ${state || "processing"}...`);
+
+            if(state === "complete"){
+                const url = mh.download?.url || mh.downloads?.[0]?.url;
+                if(!url) throw new Error("Video completed but no download URL was returned.");
+
+                const video = document.getElementById("magicHourVideo");
+                video.src = url;
+                video.style.display = "block";
+
+                const download = document.getElementById("magicHourDownload");
+                download.href = url;
+                download.style.display = "inline-flex";
+
+                project.scenes[sceneIndex].videoUrl = url;
+                project.scenes[sceneIndex].magicHourProjectId = projectId;
+                project.scenes[sceneIndex].videoStatus = "complete";
+
+                const nextBtn = document.getElementById("generateNextSceneBtn");
+                if(sceneIndex + 1 < project.scenes.length){
+                    nextBtn.style.display = "inline-flex";
+                    nextBtn.textContent = `🎬 Generate Scene ${sceneIndex + 2}`;
+                }else{
+                    nextBtn.style.display = "none";
+                }
+
+                addLog(`Magic Hour: Scene ${scene.id} completed successfully.`,"success");
+                updateProgress(100,`Scene ${scene.id} video completed.`);
+                showToast(`Scene ${scene.id} video is ready.`);
+                completed = true;
+                break;
+            }
+
+            if(state === "failed" || state === "error"){
+                throw new Error(mh.error?.message || "Magic Hour video generation failed.");
+            }
+        }
+
+        if(!completed) throw new Error("Magic Hour video is taking too long. You can check again later.");
+
+        saveProject();
+
+    }catch(error){
+        console.error(error);
+        showMagicHourOutput(`Error: ${error.message}`);
+        addLog(`Magic Hour error: ${error.message}`,"warning");
+        showToast("AI video generation failed. Check the production log.");
+    }finally{
+        magicHourBusy = false;
+    }
+}
+
+function generateNextMagicHourScene(){
+    generateMagicHourScene(magicHourSceneIndex + 1);
+}
+
+/* =========================
    FINISH
 ========================= */
 
@@ -2341,11 +2274,13 @@ function finishProduction(){
     );
 
     showToast(
-        "Storyboard ready. Starting video generation..."
+        "Video production plan completed!"
     );
 
-    // Real video generation starts only after the existing storyboard is built.
-    startMagicHourVideo();
+    /* Generate the first real AI video scene.
+       Additional scenes can be generated one-by-one
+       from the Project Output section. */
+    setTimeout(() => generateMagicHourScene(0), 700);
 
 }
 
