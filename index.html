@@ -624,6 +624,48 @@ input:focus{
     display:block;
 }
 
+/* MAGIC HOUR VIDEO OUTPUT */
+
+.video-output{
+    margin-top:18px;
+    display:none;
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:15px;
+    background:#fafafa;
+}
+
+.video-output.show{
+    display:block;
+}
+
+.video-output video{
+    width:100%;
+    max-height:520px;
+    border-radius:12px;
+    background:#111827;
+    display:block;
+}
+
+.video-output-title{
+    font-size:13px;
+    font-weight:bold;
+    margin-bottom:10px;
+}
+
+.video-output-actions{
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+    margin-top:12px;
+}
+
+.video-output-actions a{
+    text-decoration:none;
+    display:inline-flex;
+    align-items:center;
+}
+
 /* RESPONSIVE */
 
 @media(max-width:1000px){
@@ -976,14 +1018,6 @@ Write the full story here. The studio will automatically divide it into scenes."
                 </button>
 
                 <button
-                    class="btn btn-blue"
-                    onclick="generateVoice()"
-                    id="generateVoiceBtn"
-                >
-                    🎙️ Generate Voice
-                </button>
-
-                <button
                     class="btn btn-secondary"
                     onclick="saveProject()"
                 >
@@ -991,74 +1025,6 @@ Write the full story here. The studio will automatically divide it into scenes."
                 </button>
 
             </div>
-
-            <div
-                id="voiceOutput"
-                style="
-                    display:none;
-                    margin-top:14px;
-                    padding:14px;
-                    border:1px solid var(--border);
-                    border-radius:12px;
-                    background:#f9fafb;
-                "
-            >
-                <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">
-                    🎙️ Generated Voice
-                </div>
-
-                <audio
-                    id="voicePlayer"
-                    controls
-                    style="width:100%;"
-                ></audio>
-
-                <div class="action-row" style="margin-top:10px;">
-                    <button
-                        class="btn btn-green"
-                        onclick="downloadVoice()"
-                        id="downloadVoiceBtn"
-                        disabled
-                    >
-                        ⬇️ Download MP3
-                    </button>
-                </div>
-            </div>
-
-        <div
-            id="videoOutput"
-            style="
-                display:none;
-                margin-top:14px;
-                padding:14px;
-                border:1px solid var(--border);
-                border-radius:12px;
-                background:#f9fafb;
-            "
-        >
-            <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">
-                🎬 Generated Kling Video
-            </div>
-
-            <video
-                id="videoPlayer"
-                controls
-                playsinline
-                style="width:100%;max-height:520px;border-radius:10px;background:#111;"
-            ></video>
-
-            <div class="action-row" style="margin-top:10px;">
-                <a
-                    class="btn btn-green"
-                    id="downloadVideoBtn"
-                    href="#"
-                    download="talking-tails-kling-video.mp4"
-                    style="text-decoration:none;pointer-events:none;opacity:.5;"
-                >
-                    ⬇️ Download Video
-                </a>
-            </div>
-        </div>
 
         </section>
 
@@ -1173,11 +1139,20 @@ Write the full story here. The studio will automatically divide it into scenes."
                 line-height:1.6;
             ">
 
-                Create Video now sends the first generated scene to Kling through
-                the secure Supabase Edge Function. When Kling finishes,
-                the video appears above for preview and download.
+                The studio prepares the storyboard and then sends the
+                character reference to Magic Hour Wan 2.2 for real AI
+                video generation. The generated video appears below.
 
             </p>
+
+            <div id="videoOutput" class="video-output">
+                <div class="video-output-title">🎬 Generated Video</div>
+                <video id="generatedVideo" controls playsinline></video>
+                <div class="video-output-actions">
+                    <a id="generatedVideoLink" class="btn btn-blue" href="#" target="_blank" rel="noopener">▶ Open Video</a>
+                    <a id="generatedVideoDownload" class="btn btn-green" href="#" target="_blank" rel="noopener">⬇️ Download Video</a>
+                </div>
+            </div>
 
             <div class="action-row">
 
@@ -1294,203 +1269,6 @@ let project = {
     createdAt: null
 
 };
-
-
-/* =========================
-   VOICE GENERATION
-========================= */
-
-const VOICE_API_URL =
-    "https://dugkzhwwlvuckvhgcxza.supabase.co/functions/v1/dynamic-function";
-
-/* Kling video generation stays behind Supabase.
-   Never put KLING_API_KEY in this file. */
-const KLING_API_URL =
-    "https://dugkzhwwlvuckvhgcxza.supabase.co/functions/v1/kling-video";
-
-const DEFAULT_KLING_IMAGE =
-    "https://dugkzhwwlvuckvhgcxza.supabase.co/storage/v1/object/public/talking-tails/Burno.jpg";
-
-let generatedVoiceUrl = null;
-let generatedVideoUrl = null;
-let klingPollTimer = null;
-
-async function generateVoice(){
-
-    const script =
-        document
-        .getElementById("scriptInput")
-        .value
-        .trim();
-
-    if(!script){
-
-        showToast("Please add a script first.");
-
-        return;
-
-    }
-
-    const button =
-        document
-        .getElementById("generateVoiceBtn");
-
-    const output =
-        document
-        .getElementById("voiceOutput");
-
-    const player =
-        document
-        .getElementById("voicePlayer");
-
-    const downloadBtn =
-        document
-        .getElementById("downloadVoiceBtn");
-
-    button.disabled = true;
-    button.textContent = "⏳ Generating Voice...";
-
-    output.style.display = "block";
-    downloadBtn.disabled = true;
-
-    if(generatedVoiceUrl){
-
-        URL.revokeObjectURL(generatedVoiceUrl);
-        generatedVoiceUrl = null;
-
-    }
-
-    player.removeAttribute("src");
-    player.load();
-
-    try{
-
-        showToast("Sending script to ElevenLabs...");
-
-        const response =
-            await fetch(
-                VOICE_API_URL,
-                {
-                    method:"POST",
-
-                    headers:{
-                        "Content-Type":"application/json"
-                    },
-
-                    body:JSON.stringify({
-                        text:script
-                    })
-                }
-            );
-
-        if(!response.ok){
-
-            let details = "Voice generation failed.";
-
-            try{
-
-                const errorData =
-                    await response.json();
-
-                details =
-                    errorData.details ||
-                    errorData.error ||
-                    details;
-
-            }
-            catch(error){
-
-                const errorText =
-                    await response.text();
-
-                if(errorText)
-                    details = errorText;
-
-            }
-
-            throw new Error(details);
-
-        }
-
-        const contentType =
-            response.headers.get("content-type") || "";
-
-        if(!contentType.includes("audio")){
-
-            const unexpected =
-                await response.text();
-
-            throw new Error(
-                unexpected ||
-                "Server did not return an audio file."
-            );
-
-        }
-
-        const audioBlob =
-            await response.blob();
-
-        generatedVoiceUrl =
-            URL.createObjectURL(audioBlob);
-
-        player.src =
-            generatedVoiceUrl;
-
-        player.load();
-
-        downloadBtn.disabled = false;
-
-        showToast("Voice generated successfully.");
-
-    }
-    catch(error){
-
-        console.error("Voice generation error:",error);
-
-        output.style.display = "none";
-
-        showToast(
-            "Voice error: " +
-            (error.message || "Unknown error")
-        );
-
-    }
-    finally{
-
-        button.disabled = false;
-        button.textContent = "🎙️ Generate Voice";
-
-    }
-
-}
-
-
-function downloadVoice(){
-
-    if(!generatedVoiceUrl){
-
-        showToast("Generate the voice first.");
-
-        return;
-
-    }
-
-    const link =
-        document.createElement("a");
-
-    link.href =
-        generatedVoiceUrl;
-
-    link.download =
-        "talking-tails-voice.mp3";
-
-    document.body.appendChild(link);
-
-    link.click();
-
-    link.remove();
-
-}
 
 
 /* =========================
@@ -2169,407 +1947,197 @@ function createVideoPlan(){
     project.script = script;
     project.createdAt = new Date().toISOString();
 
-    const production =
-        document.getElementById("productionSection");
-
+    const production = document.getElementById("productionSection");
     production.classList.add("show");
     scrollToSection("productionSection");
 
-    // Build the local storyboard first, then send the first scene to Kling.
-    project.scenes = parseScript(project.script);
-
-    project.scenes.forEach(scene => {
-        scene.matchedCharacters =
-            matchCharacters(scene).map(c => c.name);
-    });
-
-    renderScenes();
-
-    document.getElementById("sceneCount").textContent =
-        project.scenes.length + " scenes";
-
-    generateKlingVideo();
-
+    // First build the existing storyboard, then start the real Magic Hour video.
+    runProduction();
 }
 
 
 /* =========================
-   KLING VIDEO GENERATION
+   MAGIC HOUR VIDEO API
 ========================= */
 
-function setVideoOutput(url){
+const MAGIC_HOUR_VIDEO_API =
+    "https://dugkzhwwlvuckvhgcxza.supabase.co/functions/v1/magichour-video";
 
-    const output = document.getElementById("videoOutput");
-    const player = document.getElementById("videoPlayer");
-    const download = document.getElementById("downloadVideoBtn");
+const DEFAULT_CHARACTER_IMAGE =
+    "https://dugkzhwwlvuckvhgcxza.supabase.co/storage/v1/object/public/talking-tails/Burno.jpg";
 
-    if(!url){
-        throw new Error("Kling returned an empty video URL.");
+let magicHourPollTimer = null;
+
+function getVideoImage(){
+    // If a future character is stored as a public URL, use it.
+    // Browser-uploaded data URLs are not sent to the API; use the working
+    // Supabase Burno image instead.
+    const first = project.characters && project.characters[0];
+    if(first && first.image && /^https?:\/\//i.test(first.image)){
+        return first.image;
     }
-
-    generatedVideoUrl = url;
-
-    player.src = url;
-    player.load();
-
-    download.href = url;
-    download.download = "talking-tails-kling-video.mp4";
-    download.style.pointerEvents = "auto";
-    download.style.opacity = "1";
-
-    output.style.display = "block";
-
-    output.scrollIntoView({
-        behavior:"smooth",
-        block:"center"
-    });
+    return DEFAULT_CHARACTER_IMAGE;
 }
 
-function getKlingImageUrl(){
-
-    return DEFAULT_KLING_IMAGE;
-}
-
-function buildKlingPrompt(scene){
-
-    const characterText =
-        scene &&
-        scene.matchedCharacters &&
-        scene.matchedCharacters.length
-        ? scene.matchedCharacters.join(", ")
-        : "Talking Tails animal characters";
+function getVideoPrompt(){
+    const scene = project.scenes && project.scenes[0];
+    const visual = scene ? scene.visual : "a colorful magical children's forest";
+    const emotion = scene ? scene.emotion : "warm and friendly";
+    const camera = scene ? scene.camera : "smooth cinematic shot";
 
     return [
-        "Premium 3D children's cartoon animation for Talking Tails Stories.",
-        "Keep the character appearance consistent with the reference image.",
-        "Characters: " + characterText + ".",
-        "Scene: " + (scene ? scene.text : project.script).slice(0, 900),
-        "Visual direction: " +
-            (scene
-                ? scene.visual
-                : "warm colorful family-friendly environment") + ".",
-        "Camera: " +
-            (scene
-                ? scene.camera
-                : "cinematic medium shot with gentle movement") + ".",
-        "Emotion: " +
-            (scene
-                ? scene.emotion
-                : "happy and expressive") + ".",
-        "No text, no subtitles, no watermark, child-safe, polished 3D animation."
+        "Premium 3D children's cartoon animation.",
+        "Keep the main character visually consistent with the reference image.",
+        "Cute expressive acting, natural body movement, friendly face, polished cinematic lighting.",
+        "Scene: " + visual + ".",
+        "Emotion: " + emotion + ".",
+        "Camera: " + camera + ".",
+        "No text, no subtitles, no watermark, no extra characters appearing suddenly."
     ].join(" ");
 }
 
-function extractKlingTaskId(data){
+async function startMagicHourVideo(){
+    const log = document.getElementById("productionLog");
 
-    return data?.kling?.data?.task_id ||
-           data?.kling?.task_id ||
-           data?.data?.task_id ||
-           data?.task_id ||
-           data?.result?.task_id ||
-           null;
-}
+    updateProgress(90, "Sending character image to Magic Hour...");
+    addLog("Starting Magic Hour Wan 2.2 video generation...", "info");
 
-function extractKlingVideoUrl(data){
+    try{
+        const response = await fetch(MAGIC_HOUR_VIDEO_API, {
+            method: "POST",
+            headers: {"Content-Type":"application/json"},
+            body: JSON.stringify({
+                image: getVideoImage(),
+                prompt: getVideoPrompt()
+            })
+        });
 
-    return data?.kling?.data?.task_result?.videos?.[0]?.url ||
-           data?.kling?.data?.task_result?.videos?.[0]?.video_url ||
-           data?.kling?.data?.task_result?.video_url ||
-           data?.kling?.data?.video_url ||
-           data?.kling?.video_url ||
-           data?.data?.task_result?.videos?.[0]?.url ||
-           data?.data?.task_result?.videos?.[0]?.video_url ||
-           data?.data?.task_result?.video_url ||
-           data?.data?.video_url ||
-           data?.result?.video_url ||
-           data?.video_url ||
-           data?.url ||
-           null;
-}
+        const data = await response.json().catch(() => ({}));
 
-function extractKlingStatus(data){
-
-    return String(
-        data?.kling?.data?.task_status ||
-        data?.kling?.data?.status ||
-        data?.kling?.task_status ||
-        data?.kling?.status ||
-        data?.data?.task_status ||
-        data?.data?.status ||
-        data?.result?.status ||
-        data?.status ||
-        ""
-    ).toLowerCase();
-}
-
-async function klingRequest(body){
-
-    const response = await fetch(
-        KLING_API_URL,
-        {
-            method:"POST",
-            headers:{
-                "Content-Type":"application/json"
-            },
-            body:JSON.stringify(body)
+        if(!response.ok || !data.success || !data.project?.id){
+            throw new Error(
+                data?.project?.message ||
+                data?.error?.message ||
+                data?.error ||
+                "Magic Hour could not start the video."
+            );
         }
-    );
 
-    const raw = await response.text();
+        project.video = {
+            provider: "Magic Hour",
+            model: "wan-2.2",
+            projectId: data.project.id,
+            status: "queued",
+            url: null
+        };
 
-    let data = null;
+        addLog("Magic Hour project created: " + data.project.id, "success");
+        updateProgress(92, "Magic Hour is generating the video...");
 
-    try{
-        data = raw ? JSON.parse(raw) : {};
+        pollMagicHourVideo(data.project.id);
+
+    }catch(error){
+        console.error(error);
+        addLog("Video generation failed: " + error.message, "warning");
+        updateProgress(0, "Video generation failed.");
+        showToast("Video generation failed: " + error.message);
     }
-    catch(error){
-        throw new Error(
-            raw || "Kling server returned an invalid response."
-        );
-    }
-
-    if(!response.ok || data?.success === false){
-
-        throw new Error(
-            data?.details ||
-            data?.error ||
-            data?.message ||
-            "Kling video request failed."
-        );
-    }
-
-    return data;
 }
 
-function setCreateVideoButton(loading){
-
-    const button =
-        document.querySelector(
-            'button[onclick="createVideoPlan()"]'
-        );
-
-    if(!button) return;
-
-    button.disabled = loading;
-    button.textContent =
-        loading
-        ? "⏳ Creating Video..."
-        : "🎬 CREATE VIDEO";
-}
-
-async function generateKlingVideo(){
-
-    const scene =
-        project.scenes.length
-        ? project.scenes[0]
-        : null;
-
-    if(klingPollTimer){
-        clearTimeout(klingPollTimer);
-        klingPollTimer = null;
+async function pollMagicHourVideo(projectId){
+    if(magicHourPollTimer){
+        clearTimeout(magicHourPollTimer);
+        magicHourPollTimer = null;
     }
 
-    setCreateVideoButton(true);
-
     try{
+        const response = await fetch(MAGIC_HOUR_VIDEO_API, {
+            method: "POST",
+            headers: {"Content-Type":"application/json"},
+            body: JSON.stringify({
+                action: "status",
+                project_id: projectId
+            })
+        });
 
-        updateProgress(
-            5,
-            "Preparing Kling video..."
-        );
+        const data = await response.json().catch(() => ({}));
 
-        addLog(
-            "Preparing the first cinematic scene...",
-            "info"
-        );
-
-        const data =
-            await klingRequest({
-                image: getKlingImageUrl(),
-                prompt: buildKlingPrompt(scene)
-            });
-
-        console.log("Kling response:", data);
-
-        const directUrl =
-            extractKlingVideoUrl(data);
-
-        if(directUrl){
-
-            setVideoOutput(directUrl);
-
-            updateProgress(
-                100,
-                "Video ready."
+        if(!response.ok || !data.success || !data.project){
+            throw new Error(
+                data?.project?.message ||
+                data?.error?.message ||
+                data?.error ||
+                "Could not check Magic Hour status."
             );
+        }
 
-            addLog(
-                "Kling video generated successfully.",
-                "success"
-            );
+        const status = data.project.status;
+        const videoUrl =
+            data.project?.download?.url ||
+            data.project?.downloads?.[0]?.url ||
+            null;
 
-            showToast(
-                "🎬 Video ready!"
-            );
+        if(project.video){
+            project.video.status = status;
+            project.video.url = videoUrl;
+            project.video.expiresAt =
+                data.project?.download?.expires_at ||
+                data.project?.downloads?.[0]?.expires_at ||
+                null;
+        }
 
+        if(status === "complete" && videoUrl){
+            clearTimeout(magicHourPollTimer);
+            magicHourPollTimer = null;
+
+            updateProgress(100, "Video generated successfully!");
+            addLog("Magic Hour video generation completed.", "success");
+            showGeneratedVideo(videoUrl);
+            showToast("Your video is ready!");
             return;
         }
 
-        const taskId =
-            extractKlingTaskId(data);
-
-        if(!taskId){
-
+        if(status === "failed" || status === "error"){
             throw new Error(
-                "Kling did not return a task ID or video URL. Check the Kling Edge Function response."
+                data.project?.error?.message ||
+                data.project?.error ||
+                "Magic Hour video generation failed."
             );
         }
 
-        updateProgress(
-            15,
-            "Kling task submitted. Generating video..."
+        const progress = status === "processing" ? 96 : 93;
+        updateProgress(progress, "Magic Hour status: " + status + "...");
+
+        magicHourPollTimer = setTimeout(
+            () => pollMagicHourVideo(projectId),
+            5000
         );
 
-        addLog(
-            "Kling task submitted: " + taskId,
-            "info"
-        );
-
-        await pollKlingVideo(taskId);
-
-    }
-    catch(error){
-
-        console.error(
-            "Kling video error:",
-            error
-        );
-
-        updateProgress(
-            0,
-            "Video generation failed."
-        );
-
-        addLog(
-            "Kling error: " +
-            (error.message || "Unknown error"),
-            "warning"
-        );
-
-        showToast(
-            "Kling error: " +
-            (error.message || "Unknown error")
-        );
-
+    }catch(error){
+        console.error(error);
+        addLog("Status check failed: " + error.message, "warning");
+        updateProgress(0, "Video status check failed.");
+        showToast("Video status check failed: " + error.message);
     }
 }
 
-async function pollKlingVideo(taskId){
+function showGeneratedVideo(url){
+    const box = document.getElementById("videoOutput");
+    const video = document.getElementById("generatedVideo");
+    const link = document.getElementById("generatedVideoLink");
+    const download = document.getElementById("generatedVideoDownload");
 
-    const maxAttempts = 60;
-    let attempt = 0;
+    video.src = url;
+    link.href = url;
+    download.href = url;
 
-    async function check(){
+    box.classList.add("show");
 
-        attempt++;
-
-        let data;
-
-        try{
-
-            data = await klingRequest({
-                action:"status",
-                task_id:taskId
-            });
-
-        }
-        catch(error){
-
-            // If the Edge Function does not support status polling,
-            // show a clear message instead of looping forever.
-            throw new Error(
-                "Kling task was created, but the status check failed: " +
-                (error.message || "Unknown error")
-            );
-
-        }
-
-        console.log(
-            "Kling status response:",
-            data
-        );
-
-        const url =
-            extractKlingVideoUrl(data);
-
-        const status =
-            extractKlingStatus(data);
-
-        if(url){
-
-            setVideoOutput(url);
-
-            updateProgress(
-                100,
-                "Video ready."
-            );
-
-            addLog(
-                "Kling video is ready for preview and download.",
-                "success"
-            );
-
-            showToast(
-                "🎬 Video generated successfully!"
-            );
-
-            return;
-        }
-
-        if(
-            status === "failed" ||
-            status === "error" ||
-            status === "canceled" ||
-            status === "cancelled"
-        ){
-
-            throw new Error(
-                "Kling task failed. Status: " +
-                status
-            );
-        }
-
-        const percent =
-            Math.min(
-                95,
-                15 +
-                Math.round(
-                    (attempt / maxAttempts) * 80
-                )
-            );
-
-        updateProgress(
-            percent,
-            "Kling is generating the video..." +
-            (status ? " Status: " + status : "")
-        );
-
-        if(attempt >= maxAttempts){
-
-            throw new Error(
-                "Kling is still processing. Please check again shortly."
-            );
-        }
-
-        klingPollTimer =
-            setTimeout(
-                check,
-                5000
-            );
-    }
-
-    await check();
+    setTimeout(() => {
+        box.scrollIntoView({behavior:"smooth", block:"center"});
+    }, 150);
 }
+
 
 /* =========================
    PRODUCTION PIPELINE
@@ -2773,8 +2341,11 @@ function finishProduction(){
     );
 
     showToast(
-        "Video production plan completed!"
+        "Storyboard ready. Starting video generation..."
     );
+
+    // Real video generation starts only after the existing storyboard is built.
+    startMagicHourVideo();
 
 }
 
@@ -3348,22 +2919,6 @@ function closeModal(){
 loadProject();
 
 updateWordCount();
-
-window.addEventListener("beforeunload", function(){
-
-    if(generatedVoiceUrl){
-        URL.revokeObjectURL(generatedVoiceUrl);
-    }
-
-    if(generatedVideoUrl && generatedVideoUrl.startsWith("blob:")){
-        URL.revokeObjectURL(generatedVideoUrl);
-    }
-
-    if(klingPollTimer){
-        clearTimeout(klingPollTimer);
-    }
-
-});
 
 
 /* =========================
