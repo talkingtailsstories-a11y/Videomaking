@@ -1097,21 +1097,31 @@ Write the full story here. The studio will automatically divide it into scenes."
                 line-height:1.6;
             ">
 
-                The current version prepares the complete production
-                blueprint. The next stage can connect AI video,
-                voice, lip-sync, music and rendering APIs.
+                This version renders a real animated WebM recording locally. The on-screen preview uses a direct canvas MediaStream so Chrome can play it safely even when this HTML is opened by double-clicking the file.
+                It uses your uploaded characters, automatic scenes, camera motion,
+                emotions, environments and captions without calling an external video API.
 
             </p>
 
             <div id="magicHourOutput" style="margin-top:18px;display:none;">
 
                 <div style="padding:16px;border:1px solid #e5e7eb;border-radius:12px;background:#fafafa;">
-                    <div style="font-weight:700;margin-bottom:8px;">🎬 AI Video Output</div>
+                    <div style="font-weight:700;margin-bottom:8px;">🎬 Local Animation Output</div>
                     <div id="magicHourStatus" style="font-size:13px;color:#6b7280;margin-bottom:12px;">Ready</div>
-                    <video id="magicHourVideo" controls playsinline style="width:100%;max-height:480px;border-radius:10px;background:#111;display:none;"></video>
+                    <video id="magicHourVideo" playsinline muted style="width:100%;max-height:480px;border-radius:10px;background:#111;display:none;"></video>
+                    <div id="localVideoControls" class="action-row" style="margin-top:12px;display:none;">
+                        <button id="playLocalVideoBtn" class="btn btn-primary" onclick="playLocalPreview()">▶️ Play Video + Audio</button>
+                        <span id="localDurationLabel" style="font-size:12px;color:#6b7280;align-self:center;"></span>
+                    </div>
+                    <div id="localAudioBox" style="display:none;margin-top:12px;padding:12px;border:1px solid #e5e7eb;border-radius:10px;background:#fff;">
+                        <div style="font-weight:700;font-size:13px;margin-bottom:7px;">🎵 Background Audio</div>
+                        <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">Audio is synchronized with the video preview.</div>
+                        <audio id="localAudioPlayer" controls preload="metadata" style="width:100%;"></audio>
+                    </div>
                     <div class="action-row" style="margin-top:12px;">
-                        <a id="magicHourDownload" class="btn btn-green" href="#" target="_blank" rel="noopener" style="display:none;text-decoration:none;">⬇️ Open / Download Video</a>
-                        <button id="generateNextSceneBtn" class="btn btn-primary" onclick="generateNextMagicHourScene()" style="display:none;">🎬 Generate Next Scene</button>
+                        <a id="magicHourDownload" class="btn btn-green" href="#" target="_blank" rel="noopener" style="display:none;text-decoration:none;">⬇️ Download Video (WebM)</a>
+                        <a id="localAudioDownload" class="btn btn-blue" href="#" download="talking-tails-background-audio.wav" style="display:none;text-decoration:none;">🎵 Download Audio</a>
+                        <button id="generateNextSceneBtn" class="btn btn-primary" onclick="generateNextMagicHourScene()" style="display:none;">🎬 Render Video Again</button>
                     </div>
                 </div>
 
@@ -2087,143 +2097,648 @@ function addLog(message,type){
 
 
 /* =========================
-   MAGIC HOUR VIDEO ENGINE
+   LOCAL ANIMATION ENGINE
+   No external API required.
+   Renders a real WebM video in the browser
+   using Canvas + MediaRecorder.
 ========================= */
 
-const MAGIC_HOUR_FUNCTION_URL =
-    "https://dugkzhwwlvuckvhgcxza.supabase.co/functions/v1/magichour-video";
-
-const MAGIC_HOUR_IMAGE_URL =
-    "https://dugkzhwwlvuckvhgcxza.supabase.co/storage/v1/object/public/talking-tails/Burno.jpg";
-
-let magicHourSceneIndex = 0;
-let magicHourBusy = false;
-
-function buildMagicHourPrompt(scene){
-
-    const chars =
-        scene.matchedCharacters?.length
-        ? scene.matchedCharacters.join(", ")
-        : "Talking Tails characters";
-
-    return `Premium 3D children's cartoon animation. Keep the character appearance consistent with the reference image. Characters: ${chars}. Scene: ${scene.text}. Environment: ${scene.visual}. Emotion: ${scene.emotion}. Camera: ${scene.camera}. Natural character acting, gentle body movement, expressive face, cinematic lighting, smooth motion, child-friendly, no text, no subtitles, no watermark.`;
-}
+let localRenderBusy = false;
+let localRenderAgain = false;
+let localVideoUrl = null;
+let localAudioContext = null;
+let localAudioDestination = null;
 
 function showMagicHourOutput(message){
-    document.getElementById("magicHourOutput").style.display = "block";
-    document.getElementById("magicHourStatus").textContent = message;
+    const box = document.getElementById("magicHourOutput");
+    const status = document.getElementById("magicHourStatus");
+    if(box) box.style.display = "block";
+    if(status) status.textContent = message;
 }
 
-async function magicHourRequest(body){
-    const response = await fetch(MAGIC_HOUR_FUNCTION_URL,{
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify(body)
+function getRenderCharacters(){
+    return project.characters && project.characters.length
+        ? project.characters
+        : [{name:"Talking Tails", image:null}];
+}
+
+function loadImageSafe(src){
+    return new Promise(resolve => {
+        if(!src){ resolve(null); return; }
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => resolve(null);
+        img.src = src;
     });
-    const data = await response.json().catch(()=>({}));
-    if(!response.ok || data.success === false){
-        throw new Error(data.error?.message || data.error || data.project?.message || "Magic Hour request failed.");
-    }
-    return data;
 }
 
-async function generateMagicHourScene(sceneIndex){
+function chooseCodec(){
+    const codecs = [
+        "video/webm;codecs=vp9,opus",
+        "video/webm;codecs=vp8,opus",
+        "video/webm"
+    ];
+    return codecs.find(c => window.MediaRecorder && MediaRecorder.isTypeSupported(c)) || "";
+}
 
-    if(magicHourBusy) return;
+function drawRoundedRect(ctx,x,y,w,h,r){
+    const rr = Math.min(r,w/2,h/2);
+    ctx.beginPath();
+    ctx.moveTo(x+rr,y);
+    ctx.arcTo(x+w,y,x+w,y+h,rr);
+    ctx.arcTo(x+w,y+h,x,y+h,rr);
+    ctx.arcTo(x,y+h,x,y,rr);
+    ctx.arcTo(x,y,x+w,y,rr);
+    ctx.closePath();
+}
 
-    if(!project.scenes?.length){
-        showToast("Create the video plan first.");
-        return;
+function environmentForScene(scene){
+    const v = String(scene.visual || "").toLowerCase();
+    if(v.includes("garden")) return "garden";
+    if(v.includes("river") || v.includes("water")) return "river";
+    if(v.includes("moon")) return "night";
+    if(v.includes("door") || v.includes("key")) return "door";
+    if(v.includes("forest") || v.includes("tree")) return "forest";
+    return "meadow";
+}
+
+function drawEnvironment(ctx,w,h,kind,t){
+    const phase = (t % 8000) / 8000;
+    const sky = ctx.createLinearGradient(0,0,0,h);
+    if(kind === "night"){
+        sky.addColorStop(0,"#111827");
+        sky.addColorStop(1,"#312e81");
+    }else if(kind === "garden"){
+        sky.addColorStop(0,"#bae6fd");
+        sky.addColorStop(1,"#dcfce7");
+    }else if(kind === "river"){
+        sky.addColorStop(0,"#bfdbfe");
+        sky.addColorStop(1,"#dbeafe");
+    }else{
+        sky.addColorStop(0,"#bae6fd");
+        sky.addColorStop(1,"#bbf7d0");
+    }
+    ctx.fillStyle = sky;
+    ctx.fillRect(0,0,w,h);
+
+    if(kind === "night"){
+        ctx.fillStyle = "rgba(255,255,255,.85)";
+        for(let i=0;i<45;i++){
+            const x=(i*83)%w;
+            const y=30+((i*47)%220);
+            const a=.45+.35*Math.sin(phase*Math.PI*2+i);
+            ctx.globalAlpha=a;
+            ctx.beginPath(); ctx.arc(x,y,2,0,Math.PI*2); ctx.fill();
+        }
+        ctx.globalAlpha=1;
+        ctx.fillStyle="#fef3c7";
+        ctx.beginPath(); ctx.arc(w*0.82,100,48,0,Math.PI*2); ctx.fill();
     }
 
-    if(sceneIndex >= project.scenes.length){
-        showMagicHourOutput("All storyboard scenes have been generated.");
-        return;
+    ctx.fillStyle = kind === "river" ? "#86efac" : "#65a30d";
+    ctx.beginPath();
+    ctx.moveTo(0,h*0.62);
+    ctx.quadraticCurveTo(w*.25,h*.48,w*.5,h*.62);
+    ctx.quadraticCurveTo(w*.75,h*.76,w,h*.57);
+    ctx.lineTo(w,h); ctx.lineTo(0,h); ctx.closePath(); ctx.fill();
+
+    if(kind === "river"){
+        ctx.fillStyle="#60a5fa";
+        ctx.beginPath();
+        ctx.moveTo(0,h*.82);
+        ctx.quadraticCurveTo(w*.28,h*.68,w*.5,h*.82);
+        ctx.quadraticCurveTo(w*.72,h*.94,w,h*.75);
+        ctx.lineTo(w,h); ctx.lineTo(0,h); ctx.closePath(); ctx.fill();
     }
 
-    magicHourBusy = true;
-    magicHourSceneIndex = sceneIndex;
+    const trees = kind === "garden" ? 5 : 8;
+    for(let i=0;i<trees;i++){
+        const x=(i+1)*w/(trees+1);
+        const sway=Math.sin(phase*Math.PI*2+i)*5;
+        ctx.fillStyle="#7c4a2d";
+        ctx.fillRect(x-10,h*.47,20,h*.18);
+        ctx.fillStyle="#166534";
+        ctx.beginPath(); ctx.arc(x+sway,h*.43,42,0,Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(x-25+sway,h*.49,32,0,Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(x+25+sway,h*.49,32,0,Math.PI*2); ctx.fill();
+    }
 
-    const scene = project.scenes[sceneIndex];
-    showMagicHourOutput(`Generating Scene ${scene.id} with Wan 2.2...`);
-    addLog(`Magic Hour: starting Scene ${scene.id}...`,"info");
-    updateProgress(90,`Generating AI video for Scene ${scene.id}...`);
+    if(kind === "garden"){
+        for(let i=0;i<22;i++){
+            const x=25+(i*97)%w;
+            const y=h*.72+((i*31)%120);
+            ctx.fillStyle = i%2 ? "#f472b6" : "#facc15";
+            ctx.beginPath(); ctx.arc(x,y,7,0,Math.PI*2); ctx.fill();
+            ctx.fillStyle="#65a30d"; ctx.fillRect(x-2,y+5,4,20);
+        }
+    }
 
-    try{
-        const created = await magicHourRequest({
-            image: MAGIC_HOUR_IMAGE_URL,
-            prompt: buildMagicHourPrompt(scene)
-        });
+    if(kind === "door"){
+        const x=w*.72, y=h*.37, dw=150, dh=230;
+        ctx.fillStyle="#7c2d12";
+        drawRoundedRect(ctx,x,y,dw,dh,12); ctx.fill();
+        ctx.fillStyle="#451a03";
+        drawRoundedRect(ctx,x+15,y+15,dw-30,dh-15,8); ctx.fill();
+        ctx.fillStyle="#fbbf24";
+        ctx.beginPath(); ctx.arc(x+dw-32,y+dh/2,8,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle="rgba(250,204,21,.35)";
+        ctx.beginPath(); ctx.arc(x+dw/2,y-12,28+8*Math.sin(phase*Math.PI*2),0,Math.PI*2); ctx.fill();
+    }
+}
 
-        const projectId = created.project?.id;
-        if(!projectId) throw new Error("Magic Hour did not return a project ID.");
+function drawCharacter(ctx,img,name,x,y,scale,emotion,frame,slot,total){
+    const bob = Math.sin(frame/18 + slot*1.7) * 7;
+    const sway = Math.sin(frame/31 + slot) * 0.035;
+    ctx.save();
+    ctx.translate(x,y+bob);
+    ctx.rotate(sway);
+    const w=190*scale, h=220*scale;
 
-        let completed = false;
+    if(img){
+        const ratio=Math.min(w/img.width,h/img.height);
+        const dw=img.width*ratio, dh=img.height*ratio;
+        ctx.drawImage(img,-dw/2,-dh,dw,dh);
+    }else{
+        ctx.fillStyle="#f59e0b";
+        ctx.beginPath(); ctx.arc(0,-h*.65,w*.34,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle="#111827";
+        ctx.beginPath(); ctx.arc(-w*.11,-h*.69,7,0,Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(w*.11,-h*.69,7,0,Math.PI*2); ctx.fill();
+        ctx.strokeStyle="#111827"; ctx.lineWidth=5;
+        ctx.beginPath(); ctx.arc(0,-h*.59,w*.13,0,Math.PI); ctx.stroke();
+    }
 
-        for(let attempt=0; attempt<120; attempt++){
-            await new Promise(r=>setTimeout(r,5000));
+    const label = String(name || "Character");
+    ctx.font="700 18px Arial";
+    const tw=ctx.measureText(label).width+28;
+    ctx.fillStyle="rgba(17,24,39,.78)";
+    drawRoundedRect(ctx,-tw/2,12,tw,34,17); ctx.fill();
+    ctx.fillStyle="#fff";
+    ctx.textAlign="center"; ctx.textBaseline="middle";
+    ctx.fillText(label,0,29);
 
-            const status = await magicHourRequest({
-                action:"status",
-                project_id:projectId
-            });
+    if(emotion === "happy" || emotion === "wonder" || emotion === "excited"){
+        ctx.fillStyle="#fef08a";
+        ctx.globalAlpha=.35+Math.abs(Math.sin(frame/15))*.2;
+        ctx.beginPath(); ctx.arc(0,-h*.7,w*.52,0,Math.PI*2); ctx.fill();
+        ctx.globalAlpha=1;
+    }
+    ctx.restore();
+}
 
-            const mh = status.project || {};
-            const state = String(mh.status || "").toLowerCase();
-            showMagicHourOutput(`Scene ${scene.id}: ${state || "processing"}...`);
+function drawSceneFrame(ctx,w,h,scene,images,elapsed,totalElapsed,sceneDuration){
+    const t = elapsed;
+    const frame = Math.floor(elapsed/1000*project.settings.fps);
+    const env = environmentForScene(scene);
+    drawEnvironment(ctx,w,h,env,t);
 
-            if(state === "complete"){
-                const url = mh.download?.url || mh.downloads?.[0]?.url;
-                if(!url) throw new Error("Video completed but no download URL was returned.");
+    const vignette=ctx.createRadialGradient(w/2,h*.45,100,w/2,h*.45,w*.75);
+    vignette.addColorStop(0,"rgba(255,255,255,0)");
+    vignette.addColorStop(1,"rgba(17,24,39,.25)");
+    ctx.fillStyle=vignette; ctx.fillRect(0,0,w,h);
 
-                const video = document.getElementById("magicHourVideo");
-                video.src = url;
-                video.style.display = "block";
+    const names = scene.matchedCharacters?.length ? scene.matchedCharacters : scene.characters;
+    const chars = getRenderCharacters().filter(c => !names?.length || names.some(n => String(n).toLowerCase()===String(c.name).toLowerCase()));
+    const active = chars.length ? chars.slice(0,3) : getRenderCharacters().slice(0,1);
+    const positions = active.length===1 ? [w*.5] : active.length===2 ? [w*.36,w*.64] : [w*.24,w*.5,w*.76];
+    active.forEach((c,i)=>drawCharacter(ctx,images[c.id],c.name,positions[i],h*.73,active.length===1?1.05:.82,scene.emotion,frame,i,active.length));
 
-                const download = document.getElementById("magicHourDownload");
-                download.href = url;
-                download.style.display = "inline-flex";
+    const progress = Math.min(1, elapsed/Math.max(1,sceneDuration));
+    const title = `Scene ${scene.id}  •  ${scene.visual}`;
+    ctx.fillStyle="rgba(17,24,39,.72)";
+    drawRoundedRect(ctx,32,28,Math.min(w-64,760),58,18); ctx.fill();
+    ctx.fillStyle="#fff"; ctx.font="700 21px Arial"; ctx.textAlign="left"; ctx.textBaseline="middle";
+    ctx.fillText(title,55,57);
 
-                project.scenes[sceneIndex].videoUrl = url;
-                project.scenes[sceneIndex].magicHourProjectId = projectId;
-                project.scenes[sceneIndex].videoStatus = "complete";
+    const words = String(scene.text||"").replace(/^[^:]{1,30}:\s*/,"");
+    ctx.fillStyle="rgba(255,255,255,.92)";
+    drawRoundedRect(ctx,50,h-145,w-100,92,22); ctx.fill();
+    ctx.fillStyle="#111827"; ctx.font="600 24px Arial";
+    const maxWidth=w-150;
+    const lines=[]; let line="";
+    words.split(/\s+/).forEach(word=>{
+        const test=line?line+" "+word:word;
+        if(ctx.measureText(test).width>maxWidth){lines.push(line);line=word;}else line=test;
+    }); if(line) lines.push(line);
+    lines.slice(0,3).forEach((ln,i)=>ctx.fillText(ln,75,h-115+i*29));
 
-                const nextBtn = document.getElementById("generateNextSceneBtn");
-                if(sceneIndex + 1 < project.scenes.length){
-                    nextBtn.style.display = "inline-flex";
-                    nextBtn.textContent = `🎬 Generate Scene ${sceneIndex + 2}`;
-                }else{
-                    nextBtn.style.display = "none";
-                }
+    ctx.fillStyle="rgba(255,255,255,.35)"; ctx.fillRect(50,h-35,w-100,5);
+    ctx.fillStyle="#fff"; ctx.fillRect(50,h-35,(w-100)*progress,5);
 
-                addLog(`Magic Hour: Scene ${scene.id} completed successfully.`,"success");
-                updateProgress(100,`Scene ${scene.id} video completed.`);
-                showToast(`Scene ${scene.id} video is ready.`);
-                completed = true;
-                break;
+    ctx.fillStyle="rgba(17,24,39,.55)";
+    ctx.font="500 14px Arial"; ctx.textAlign="right";
+    ctx.fillText(`Local Animation Engine  •  ${Math.round(totalElapsed/1000)}s`,w-45,h-15);
+}
+
+function createWavBlob(durationSeconds, sampleRate=44100){
+    const duration=Math.max(1,Math.ceil(durationSeconds));
+    const totalSamples=duration*sampleRate;
+    const data=new Float32Array(totalSamples);
+    const melody=[261.63,329.63,392.00,329.63,293.66,349.23,440.00,349.23];
+    const step=0.55;
+
+    for(let i=0;i<totalSamples;i++){
+        const t=i/sampleRate;
+        const noteIndex=Math.floor(t/step)%melody.length;
+        const freq=melody[noteIndex];
+        const localTime=t%step;
+        const attack=Math.min(1,localTime/0.035);
+        const release=Math.max(0,1-(localTime/step));
+        const envelope=attack*release;
+        const wave=
+            0.70*Math.sin(2*Math.PI*freq*t)+
+            0.20*Math.sin(2*Math.PI*freq*2*t)+
+            0.10*Math.sin(2*Math.PI*freq*0.5*t);
+        const fadeIn=Math.min(1,t/0.8);
+        const fadeOut=Math.min(1,(duration-t)/1.0);
+        data[i]=wave*envelope*0.22*fadeIn*Math.max(0,fadeOut);
+    }
+
+    const buffer=new ArrayBuffer(44+data.length*2);
+    const view=new DataView(buffer);
+    const writeString=(offset,str)=>{
+        for(let i=0;i<str.length;i++) view.setUint8(offset+i,str.charCodeAt(i));
+    };
+
+    writeString(0,"RIFF");
+    view.setUint32(4,36+data.length*2,true);
+    writeString(8,"WAVE");
+    writeString(12,"fmt ");
+    view.setUint32(16,16,true);
+    view.setUint16(20,1,true);
+    view.setUint16(22,1,true);
+    view.setUint32(24,sampleRate,true);
+    view.setUint32(28,sampleRate*2,true);
+    view.setUint16(32,2,true);
+    view.setUint16(34,16,true);
+    writeString(36,"data");
+    view.setUint32(40,data.length*2,true);
+
+    let offset=44;
+    for(let i=0;i<data.length;i++,offset+=2){
+        const sample=Math.max(-1,Math.min(1,data[i]));
+        view.setInt16(offset,sample<0?sample*0x8000:sample*0x7fff,true);
+    }
+
+    return new Blob([buffer],{type:"audio/wav"});
+}
+
+
+/* FILE:// SAFE LOCAL PREVIEW
+   Chrome can reject blob/data media URLs from a file:// document.
+   The recorded WebM is therefore DOWNLOAD-ONLY. The on-screen preview
+   uses a direct canvas MediaStream, which avoids the URL safety check. */
+
+let localPreviewCanvas=null;
+let localPreviewStream=null;
+let localPreviewAnimation=null;
+let localPreviewPlaying=false;
+let localPreviewImages={};
+let localPreviewStartTime=0;
+let localPreviewPausedAt=0;
+let localPreviewDurationMs=0;
+
+function stopLocalPreviewStream(){
+    localPreviewPlaying=false;
+    if(localPreviewAnimation) cancelAnimationFrame(localPreviewAnimation);
+    localPreviewAnimation=null;
+    if(localPreviewStream){
+        localPreviewStream.getTracks().forEach(t=>{try{t.stop();}catch(_){ }});
+        localPreviewStream=null;
+    }
+}
+
+function prepareLocalLivePreview(images){
+    stopLocalPreviewStream();
+    const old=document.getElementById("localPreviewCanvas");
+    if(old) old.remove();
+
+    const canvas=document.createElement("canvas");
+    canvas.id="localPreviewCanvas";
+    canvas.width=1280;
+    canvas.height=720;
+    canvas.style.display="none";
+    document.body.appendChild(canvas);
+
+    localPreviewCanvas=canvas;
+    localPreviewImages=images||{};
+    localPreviewDurationMs=Math.max(1000,
+        project.scenes.reduce((sum,s)=>sum+Math.min(Math.max(Number(s.duration)||5,3),12),0)*1000);
+
+    localPreviewStream=canvas.captureStream(24);
+
+    const video=document.getElementById("magicHourVideo");
+    if(video){
+        video.pause();
+        video.removeAttribute("src");
+        video.srcObject=localPreviewStream;
+        video.controls=false;
+        video.muted=true;
+        video.autoplay=false;
+        video.playsInline=true;
+        video.style.display="block";
+        video.load();
+    }
+    drawLocalPreviewFrame(0);
+}
+
+function drawLocalPreviewFrame(elapsedMs){
+    if(!localPreviewCanvas||!project.scenes?.length) return;
+    const ctx=localPreviewCanvas.getContext("2d",{alpha:false});
+    let remaining=Math.max(0,Math.min(elapsedMs,localPreviewDurationMs));
+    let accumulated=0;
+    let selected=project.scenes[project.scenes.length-1];
+    let sceneElapsed=0;
+
+    for(const scene of project.scenes){
+        const d=Math.min(Math.max(Number(scene.duration)||5,3),12)*1000;
+        if(remaining<=accumulated+d){
+            selected=scene;
+            sceneElapsed=remaining-accumulated;
+            break;
+        }
+        accumulated+=d;
+    }
+
+    drawSceneFrame(ctx,1280,720,selected,localPreviewImages,
+        sceneElapsed,remaining,
+        Math.min(Math.max(Number(selected.duration)||5,3),12)*1000);
+}
+
+function startLocalPreviewAnimation(){
+    if(!localPreviewCanvas||!localPreviewStream) return;
+
+    localPreviewPlaying=true;
+    localPreviewStartTime=performance.now()-(localPreviewPausedAt||0);
+
+    const audio=document.getElementById("localAudioPlayer");
+    if(audio){
+        try{audio.currentTime=(localPreviewPausedAt||0)/1000;}catch(_){}
+        audio.play().catch(()=>{});
+    }
+
+    const button=document.getElementById("playLocalVideoBtn");
+    if(button) button.textContent="⏸️ Pause Video + Audio";
+
+    const tick=(now)=>{
+        if(!localPreviewPlaying) return;
+        const elapsed=now-localPreviewStartTime;
+
+        if(elapsed>=localPreviewDurationMs){
+            localPreviewPlaying=false;
+            localPreviewPausedAt=0;
+            drawLocalPreviewFrame(localPreviewDurationMs);
+            if(audio){
+                audio.pause();
+                try{audio.currentTime=0;}catch(_){}
             }
-
-            if(state === "failed" || state === "error"){
-                throw new Error(mh.error?.message || "Magic Hour video generation failed.");
-            }
+            if(button) button.textContent="▶️ Play Video + Audio";
+            return;
         }
 
-        if(!completed) throw new Error("Magic Hour video is taking too long. You can check again later.");
+        drawLocalPreviewFrame(elapsed);
+        localPreviewAnimation=requestAnimationFrame(tick);
+    };
+
+    localPreviewAnimation=requestAnimationFrame(tick);
+}
+
+function pauseLocalPreviewAnimation(){
+    if(!localPreviewPlaying) return;
+    localPreviewPlaying=false;
+    if(localPreviewAnimation) cancelAnimationFrame(localPreviewAnimation);
+    localPreviewAnimation=null;
+
+    localPreviewPausedAt=Math.max(0,Math.min(
+        localPreviewDurationMs,
+        performance.now()-localPreviewStartTime
+    ));
+
+    const audio=document.getElementById("localAudioPlayer");
+    if(audio) audio.pause();
+
+    const button=document.getElementById("playLocalVideoBtn");
+    if(button) button.textContent="▶️ Play Video + Audio";
+}
+
+function playLocalPreview(){
+    if(!localPreviewStream){
+        showToast("Video preview is not ready yet.");
+        return;
+    }
+    if(localPreviewPlaying) pauseLocalPreviewAnimation();
+    else{
+        if(localPreviewPausedAt>=localPreviewDurationMs) localPreviewPausedAt=0;
+        startLocalPreviewAnimation();
+    }
+}
+
+function setupLocalAudioSync(video,audio){
+    if(audio) audio.volume=1;
+}
+
+async function generateLocalVideo(){
+    if(localRenderBusy) return;
+    if(!project.scenes?.length){ showToast("Create the video plan first."); return; }
+    if(!window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream){
+        showMagicHourOutput("This browser does not support local video recording. Please use the latest Chrome or Edge.");
+        return;
+    }
+
+    localRenderBusy=true;
+    const btn=document.getElementById("generateNextSceneBtn");
+    if(btn){btn.disabled=true;btn.textContent="⏳ Rendering...";}
+    showMagicHourOutput("Preparing local animation engine...");
+    addLog("Local Animation Engine: preparing browser-safe video renderer...","info");
+
+    let recorder=null;
+    let videoStream=null;
+    let localVideoUrl=null;
+
+    try{
+        const canvas=document.createElement("canvas");
+        const [cw,ch]=String(project.settings.resolution||"1920x1080").split("x").map(Number);
+        canvas.width=cw||1920;
+        canvas.height=ch||1080;
+        const ctx=canvas.getContext("2d",{alpha:false,desynchronized:false});
+        if(!ctx) throw new Error("Canvas rendering is not available in this browser.");
+
+        const images={};
+        for(const c of getRenderCharacters()) images[c.id]=await loadImageSafe(c.image);
+
+        const fps=Math.max(15,Math.min(30,Number(project.settings.fps)||24));
+        videoStream=canvas.captureStream(fps);
+
+        /* Draw a valid first frame BEFORE recording starts. */
+        const firstScene=project.scenes[0];
+        drawSceneFrame(ctx,canvas.width,canvas.height,firstScene,images,0,0,
+            Math.min(Math.max(Number(firstScene.duration)||5,3),12)*1000);
+
+        const mimeCandidates=[
+            "video/webm;codecs=vp8",
+            "video/webm;codecs=vp9",
+            "video/webm"
+        ];
+        const mime=mimeCandidates.find(c=>MediaRecorder.isTypeSupported(c))||"";
+        if(!mime) throw new Error("Chrome does not support a compatible WebM video codec.");
+
+        recorder=new MediaRecorder(videoStream,{
+            mimeType:mime,
+            videoBitsPerSecond:5000000
+        });
+
+        const chunks=[];
+        let recorderError=null;
+        recorder.ondataavailable=e=>{
+            if(e.data && e.data.size>0) chunks.push(e.data);
+        };
+        recorder.onerror=e=>{
+            recorderError=e.error || new Error("MediaRecorder error");
+        };
+
+        const stopped=new Promise((resolve,reject)=>{
+            recorder.onstop=()=>recorderError?reject(recorderError):resolve();
+        });
+
+        /* Video-only recording is intentional here. Chrome has been known to
+           reject some locally-created WebM files when an audio MediaStreamTrack
+           is muxed into the same recording. We create a separate WAV audio track
+           and synchronize it with the video player, which is much more reliable. */
+        recorder.start(250);
+        addLog(`Local Animation Engine: recording video with ${mime}...`,"info");
+
+        const totalDuration=project.scenes.reduce(
+            (sum,s)=>sum+Math.min(Math.max(Number(s.duration)||5,3),12),0
+        );
+        let totalElapsed=0;
+
+        for(let si=0;si<project.scenes.length;si++){
+            const scene=project.scenes[si];
+            const duration=Math.min(Math.max(Number(scene.duration)||5,3),12)*1000;
+            const start=performance.now();
+
+            addLog(`Local Animation: rendering Scene ${scene.id}...`,"info");
+            showMagicHourOutput(`Rendering Scene ${scene.id} of ${project.scenes.length}...`);
+
+            await new Promise(resolve=>{
+                function frame(now){
+                    const elapsed=Math.min(duration,now-start);
+                    drawSceneFrame(ctx,canvas.width,canvas.height,scene,images,
+                        elapsed,totalElapsed+elapsed,duration);
+                    const percent=86+Math.round(((totalElapsed+elapsed)/(totalDuration*1000))*13);
+                    updateProgress(Math.min(99,percent),`Rendering Scene ${scene.id} locally...`);
+                    if(elapsed<duration) requestAnimationFrame(frame);
+                    else resolve();
+                }
+                requestAnimationFrame(frame);
+            });
+            totalElapsed+=duration;
+        }
+
+        /* Keep the final frame visible briefly so the last WebM cluster is closed cleanly. */
+        ctx.fillStyle="#111827";
+        ctx.fillRect(0,0,canvas.width,canvas.height);
+        ctx.fillStyle="#fff";
+        ctx.textAlign="center";
+        ctx.font="700 42px Arial";
+        ctx.fillText("Every Paw Has a Story.",canvas.width/2,canvas.height/2);
+        await new Promise(r=>setTimeout(r,700));
+
+        recorder.stop();
+        await stopped;
+
+        if(videoStream) videoStream.getTracks().forEach(t=>{try{t.stop();}catch(_){ }});
+        if(!chunks.length) throw new Error("The browser did not return any video data.");
+
+        const blob=new Blob(chunks,{type:recorder.mimeType||mime});
+        if(blob.size<20000) throw new Error("The rendered video file is empty or incomplete.");
+
+        if(localVideoUrl) URL.revokeObjectURL(localVideoUrl);
+        localVideoUrl=URL.createObjectURL(blob);
+
+        /*
+           Do not put the recorded Blob/data URL into <video>.
+           That is exactly what triggers Chrome's file:// URL safety check.
+           The recording remains available through the download link.
+           Preview is a direct MediaStream from a canvas.
+        */
+
+        const expectedDurationSeconds=Math.max(1,Math.ceil(
+            project.scenes.reduce(
+                (sum,s)=>sum+Math.min(Math.max(Number(s.duration)||5,3),12),0
+            )
+        ));
+
+        prepareLocalLivePreview(images);
+        drawLocalPreviewFrame(0);
+
+        /* Generate a separate, standard WAV audio file. */
+        const audioSeconds=expectedDurationSeconds;
+        const audioBlob=createWavBlob(audioSeconds);
+        const audioUrl=URL.createObjectURL(audioBlob);
+        const audio=document.getElementById("localAudioPlayer");
+        const audioBox=document.getElementById("localAudioBox");
+        const audioDownload=document.getElementById("localAudioDownload");
+        if(audio){
+            audio.pause();
+            audio.src=audioUrl;
+            audio.currentTime=0;
+            audio.load();
+        }
+        if(audioBox) audioBox.style.display="block";
+        if(audioDownload){
+            audioDownload.href=audioUrl;
+            audioDownload.download="talking-tails-background-audio.wav";
+            audioDownload.style.display="inline-flex";
+        }
+        setupLocalAudioSync(video,audio);
+
+        const controls=document.getElementById("localVideoControls");
+        const durationLabel=document.getElementById("localDurationLabel");
+        if(controls) controls.style.display="flex";
+        if(durationLabel) durationLabel.textContent=`⏱️ Story duration: ${expectedDurationSeconds}s`;
+
+        const download=document.getElementById("magicHourDownload");
+        download.href=localVideoUrl;
+        download.download="talking-tails-local-animation.webm";
+        download.style.display="inline-flex";
+        download.textContent="⬇️ Download Video (WebM)";
+
+        if(btn){btn.disabled=false;btn.textContent="🔄 Render Video Again";}
+
+        project.renderedVideo={
+            engine:"Local Animation Engine",
+            format:"webm",
+            audio:"separate-synchronized-wav",
+            mimeType:recorder.mimeType||mime,
+            createdAt:new Date().toISOString(),
+            scenes:project.scenes.length,
+            durationSeconds:expectedDurationSeconds,
+            browserReportedDuration:null
+        };
 
         saveProject();
+        updateProgress(100,"Local video completed successfully.");
+        addLog(`Local Animation Engine: video completed — ${expectedDurationSeconds} seconds. Audio generated separately and synchronized.` ,"success");
+        showMagicHourOutput(`✅ Video ready — ${expectedDurationSeconds}s animation. Play the video normally; the Background Audio player below is synchronized with it.`);
+        showToast("Your Talking Tails video is ready to play.");
 
     }catch(error){
         console.error(error);
-        showMagicHourOutput(`Error: ${error.message}`);
-        addLog(`Magic Hour error: ${error.message}`,"warning");
-        showToast("AI video generation failed. Check the production log.");
+        if(recorder && recorder.state !== "inactive"){
+            try{recorder.stop();}catch(_){ }
+        }
+        if(videoStream) videoStream.getTracks().forEach(t=>{try{t.stop();}catch(_){ }});
+        showMagicHourOutput(`❌ Error: ${error.message}`);
+        addLog(`Local Animation error: ${error.message}`,"warning");
+        showToast("Video rendering failed. Check the production log.");
     }finally{
-        magicHourBusy = false;
+        localRenderBusy=false;
+        if(btn) btn.disabled=false;
     }
 }
-
 function generateNextMagicHourScene(){
-    generateMagicHourScene(magicHourSceneIndex + 1);
+    generateLocalVideo();
 }
 
 /* =========================
@@ -2280,7 +2795,7 @@ function finishProduction(){
     /* Generate the first real AI video scene.
        Additional scenes can be generated one-by-one
        from the Project Output section. */
-    setTimeout(() => generateMagicHourScene(0), 700);
+    setTimeout(() => generateLocalVideo(), 700);
 
 }
 
